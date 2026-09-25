@@ -269,43 +269,60 @@ public sealed partial class MetaGenerator
         var items = new List<string>();
         foreach (var e in Components)
         {
-            int cost = ComponentCost(e);
-            // the built-in magazine reads "Default Clip" (WCT_CLIP1), the extended one WCT_CLIP2
-            string tl = e.Role == "clip"
-                ? (e.Default ? "WCT_CLIP1" : "WCT_CLIP2")
-                : e.Role switch
-                {
-                    "suppressor" => "WCT_SUPP",
-                    "flashlight" => "WCT_FLASH",
-                    "scope" => "WCT_SCOPE",
-                    _ => "WCT_INVALID",
-                };
-            items.Add("\t\t\t\t<Item>\n" +
-                      $"\t\t\t\t\t<componentName>{e.NewName}</componentName>\n" +
-                      $"\t\t\t\t\t<cost value=\"{cost}\"/>\n" +
-                      $"\t\t\t\t\t<textLabel>{tl}</textLabel>\n" +
-                      "\t\t\t\t\t<componentDesc>INVALID</componentDesc>\n" +
-                      "\t\t\t\t</Item>");
+            items.Add(ShopComponentItem(e.NewName, ComponentCost(e), ComponentLabel(e.Role, e.Default)));
         }
-        return XmlDecl +
-               "<WeaponShopItemArray>\n\t<weaponShopItems>\n\t\t<Item>\n" +
-               $"\t\t\t<lockHash>{_plan.Unlock}</lockHash>\n" +
-               $"\t\t\t<nameHash>{_plan.WeaponHash}</nameHash>\n" +
-               $"\t\t\t<cost value=\"{Price}\"/>\n" +
-               $"\t\t\t<ammoCost value=\"{AmmoCost}\"/>\n" +
-               $"\t\t\t<textLabel>{_plan.LabelName}</textLabel>\n" +
-               $"\t\t\t<weaponDesc>{_plan.LabelDesc}</weaponDesc>\n" +
-               $"\t\t\t<weaponTT>{_plan.LabelTt}</weaponTT>\n" +
-               $"\t\t\t<weaponUppercase>{_plan.LabelUpper}</weaponUppercase>\n" +
-               $"\t\t\t<id value=\"{_plan.ShopId}\"/>\n" +
-               "\t\t\t<weaponComponents>\n" + string.Join("\n", items) + "\n\t\t\t</weaponComponents>\n" +
-               "\t\t</Item>\n\t</weaponShopItems>\n</WeaponShopItemArray>\n";
+        return ShopWeaponMeta([ShopWeaponItem(_plan.Unlock, _plan.WeaponHash, Price, AmmoCost, _plan.LabelName,
+                                              _plan.LabelDesc, _plan.LabelTt, _plan.LabelUpper, _plan.ShopId, items)]);
     }
 
-    public string ContentUnlocksMeta() =>
+    /// <summary>The built-in magazine reads "Default Clip" (WCT_CLIP1), the extended one WCT_CLIP2.</summary>
+    public static string ComponentLabel(string role, bool isDefault) =>
+        role == "clip"
+            ? (isDefault ? "WCT_CLIP1" : "WCT_CLIP2")
+            : role switch
+            {
+                "suppressor" => "WCT_SUPP",
+                "flashlight" => "WCT_FLASH",
+                "scope" => "WCT_SCOPE",
+                _ => "WCT_INVALID",
+            };
+
+    public static string ShopComponentItem(string name, int cost, string label) =>
+        "\t\t\t\t<Item>\n" +
+        $"\t\t\t\t\t<componentName>{name}</componentName>\n" +
+        $"\t\t\t\t\t<cost value=\"{cost}\"/>\n" +
+        $"\t\t\t\t\t<textLabel>{label}</textLabel>\n" +
+        "\t\t\t\t\t<componentDesc>INVALID</componentDesc>\n" +
+        "\t\t\t\t</Item>";
+
+    public static string ShopWeaponItem(string unlock, string weaponHash, int price, int ammoCost,
+                                        string labelName, string labelDesc, string labelTt, string labelUpper,
+                                        int shopId, IReadOnlyList<string> componentItems) =>
+        "\t\t<Item>\n" +
+        $"\t\t\t<lockHash>{unlock}</lockHash>\n" +
+        $"\t\t\t<nameHash>{weaponHash}</nameHash>\n" +
+        $"\t\t\t<cost value=\"{price}\"/>\n" +
+        $"\t\t\t<ammoCost value=\"{ammoCost}\"/>\n" +
+        $"\t\t\t<textLabel>{labelName}</textLabel>\n" +
+        $"\t\t\t<weaponDesc>{labelDesc}</weaponDesc>\n" +
+        $"\t\t\t<weaponTT>{labelTt}</weaponTT>\n" +
+        $"\t\t\t<weaponUppercase>{labelUpper}</weaponUppercase>\n" +
+        $"\t\t\t<id value=\"{shopId}\"/>\n" +
+        "\t\t\t<weaponComponents>\n" + string.Join("\n", componentItems) + "\n\t\t\t</weaponComponents>\n" +
+        "\t\t</Item>";
+
+    public static string ShopWeaponMeta(IEnumerable<string> weaponItems) =>
+        XmlDecl +
+        "<WeaponShopItemArray>\n\t<weaponShopItems>\n" +
+        string.Join("\n", weaponItems) +
+        "\n\t</weaponShopItems>\n</WeaponShopItemArray>\n";
+
+    public string ContentUnlocksMeta() => ContentUnlocksMeta([_plan.Unlock]);
+
+    public static string ContentUnlocksMeta(IEnumerable<string> unlocks) =>
         XmlDecl +
         "<SContentUnlocks>\n  <listOfUnlocks>\n" +
-        $"\t<Item>{_plan.Unlock}</Item>\n" +
+        string.Concat(unlocks.Select(u => $"\t<Item>{u}</Item>\n")) +
         "  </listOfUnlocks>\n</SContentUnlocks>\n";
 
     public string WeaponAnimationsMeta()

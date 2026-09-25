@@ -320,4 +320,106 @@ public static class Overrides
                                 "x64/models/cdimages/weapons.rpf).");
         return result;
     }
+
+    /// <summary>
+    /// Give every weapon of an imported pack that has no shop_weapon.meta entry one
+    /// (plus its content unlock and name labels): many "singleplayer add-on" archives
+    /// ship only weapon.meta, so the weapon spawns by name but GET_NUM_DLC_WEAPONS —
+    /// and every menu built on it — never sees it. Returns the weapon names completed.
+    /// </summary>
+    public static List<string> CompleteShopEntries(ImportedPack imported, string tag, string? displayName,
+                                                   string desc, int price, int ammoCost, int shopId)
+    {
+        var inShop = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in imported.Metas.Where(m => m.Slot == "shop_weapon.meta"))
+            if (EtXml.TryParse(m.Content) is { } root)
+                foreach (var item in EtXml.FindAll(root, ".//weaponShopItems/Item"))
+                    if (EtXml.ChildTextNonEmpty(item, "nameHash") is { } nh) inShop.Add(nh);
+
+        var ctypes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var m in imported.Metas.Where(m => m.Slot == "weaponcomponents.meta"))
+            if (EtXml.TryParse(m.Content) is { } root)
+                foreach (var el in EtXml.Iter(root, "Item"))
+                    if (EtXml.ChildTextNonEmpty(el, "Name") is { } cn && (string?)el.Attribute("type") is { } ct)
+                        ctypes[cn] = ct;
+
+        var missing = new List<XElement>();
+        foreach (var m in imported.Metas.Where(m => m.Slot == "weapon.meta"))
+            if (EtXml.TryParse(m.Content) is { } root)
+                foreach (var info in EtXml.Iter(root, "Item").Where(i => (string?)i.Attribute("type") == "CWeaponInfo"))
+                {
+                    var name = EtXml.ChildTextNonEmpty(info, "Name");
+                    // vehicle weapons and model-less entries are never sold
+                    if (name is null || EtXml.ChildTextNonEmpty(info, "Model") is null ||
+                        name.StartsWith("VEHICLE_", StringComparison.OrdinalIgnoreCase) || inShop.Contains(name))
+                        continue;
+                    inShop.Add(name);
+                    missing.Add(info);
+                }
+        if (missing.Count == 0) return [];
+
+        var items = new List<string>();
+        var unlocks = new List<string>();
+        var done = new List<string>();
+        for (int i = 0; i < missing.Count; i++)
+        {
+            var info = missing[i];
+            var name = EtXml.ChildTextNonEmpty(info, "Name")!;
+            var t = missing.Count == 1 ? tag : $"{tag}_{i + 1}";
+            var shown = missing.Count == 1 && !string.IsNullOrWhiteSpace(displayName) ? displayName.Trim() : PrettyName(name);
+
+            // the weapon's own name label: keep it if the pack translates it or it is one of
+            // the game's (WT_*); otherwise it is a placeholder with no text, so give it one
+            var label = EtXml.ChildTextNonEmpty(info, "HumanNameHash");
+            if (label is null || label.Equals("WT_INVALID", StringComparison.OrdinalIgnoreCase))
+                label = $"AWN_{t}";
+            if (!imported.LabelHashes.ContainsKey(Gxt2.Joaat(label)) &&
+                !label.StartsWith("WT_", StringComparison.OrdinalIgnoreCase))
+                imported.LabelHashes[Gxt2.Joaat(label)] = shown;
+            var (upper, descL, tt) = ($"AWU_{t}", $"AWD_{t}", $"AWT_{t}");
+            imported.LabelHashes[Gxt2.Joaat(upper)] = shown.ToUpperInvariant();
+            imported.LabelHashes[Gxt2.Joaat(descL)] = desc;
+            imported.LabelHashes[Gxt2.Joaat(tt)] = desc;
+
+            var comps = new List<string>();
+            foreach (var ap in EtXml.FindAll(info, "AttachPoints/Item"))
+                foreach (var c in EtXml.FindAll(ap, "Components/Item"))
+                {
+                    var cn = EtXml.ChildTextNonEmpty(c, "Name");
+                    if (cn is null) continue;
+                    bool def = (string?)c.Element("Default")?.Attribute("value") == "true";
+                    var role = MetaGenerator.RoleOfComponent(cn, ctypes.GetValueOrDefault(cn, ""));
+                    int cost = role == "clip" ? (def ? 1 : 400) : 500;
+                    comps.Add(MetaGenerator.ShopComponentItem(cn, cost, MetaGenerator.ComponentLabel(role, def)));
+                }
+
+            var unlock = $"CU_{name}";
+            unlocks.Add(unlock);
+            items.Add(MetaGenerator.ShopWeaponItem(unlock, name, price, ammoCost, label, descL, tt, upper, shopId, comps));
+            done.Add(name);
+        }
+
+        AddGenerated(imported, "shop_weapon.meta", MetaGenerator.ShopWeaponMeta(items));
+        AddGenerated(imported, "contentunlocks.meta", MetaGenerator.ContentUnlocksMeta(unlocks));
+        return done;
+    }
+
+    /// <summary>Add a generated meta under a file name none of the archive's own metas use.</summary>
+    private static void AddGenerated(ImportedPack imported, string slot, string content)
+    {
+        var stem = Path.GetFileNameWithoutExtension(slot);
+        var name = slot;
+        for (int n = 2; imported.Metas.Any(m => m.Name.Equals(name, StringComparison.OrdinalIgnoreCase)); n++)
+            name = $"{stem}{n}.meta";
+        var (ftype, sub) = FileTypes[slot];
+        imported.Metas.Add(new ImportedMeta(slot, name, sub, ftype, content));
+    }
+
+    /// <summary>WEAPON_VG_1_5 -> "VG 1 5": a readable fallback name for a weapon hash.</summary>
+    private static string PrettyName(string weaponHash)
+    {
+        var s = weaponHash.StartsWith("WEAPON_", StringComparison.OrdinalIgnoreCase) ? weaponHash[7..] : weaponHash;
+        s = s.Replace('_', ' ').Trim();
+        return s.Length > 0 ? s : weaponHash;
+    }
 }

@@ -24,6 +24,14 @@ public sealed class PackWeapon
     [JsonPropertyName("label_hashes")] public Dictionary<string, string> LabelHashes { get; set; } = [];
     [JsonPropertyName("assets")] public List<string> Assets { get; set; } = [];
     [JsonPropertyName("files")] public List<PackFile> Files { get; set; } = [];
+    /// <summary>
+    /// Switched off by the player: its files stay in the pack (dlc.rpf and the embedded
+    /// manifest) but content.xml doesn't list them, so the game never loads them.
+    /// Written only when set, so the manifest stays what the Python builder wrote.
+    /// </summary>
+    [JsonPropertyName("disabled")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Disabled { get; set; }
 }
 
 /// <summary>
@@ -314,6 +322,32 @@ public sealed partial class MergedPack
              $"{Data.Weapons.Count} weapon(s).");
     }
 
+    // ---- switch off / remove a weapon ---------------------------------------
+
+    /// <summary>Switch a weapon on or off; returns false when nothing changed.</summary>
+    public bool SetEnabled(string suffix, bool enabled)
+    {
+        if (!Data.Weapons.TryGetValue(suffix, out var w) || w.Disabled == !enabled) return false;
+        w.Disabled = !enabled;
+        Dirty = true;
+        Save();
+        _log($"'{FolderName}': weapon '{w.Name}' switched {(enabled ? "on" : "off")}.");
+        return true;
+    }
+
+    /// <summary>Drop a weapon with its metas, labels and every model no other weapon uses.</summary>
+    public bool RemoveWeapon(string suffix)
+    {
+        if (!Data.Weapons.TryGetValue(suffix, out var w)) return false;
+        DropStaleAssets(suffix, []);
+        Data.Weapons.Remove(suffix);
+        Dirty = true;
+        Save();
+        _log($"'{FolderName}': weapon '{w.Name}' removed ({w.Assets.Count} model(s), {w.Files.Count} meta file(s)); " +
+             $"{Data.Weapons.Count} weapon(s) left.");
+        return true;
+    }
+
     // ---- pack everything into a single dlc.rpf -----------------------------
 
     public sealed record PackBuild(string Root, string DlcRpf, List<string> Weapons, string Folder, long Size);
@@ -346,17 +380,22 @@ public sealed partial class MergedPack
             // per-weapon metas + labels
             var allLabels = new Dictionary<string, string>();
             var allHashes = new Dictionary<uint, string>();
+            // (a switched-off weapon's metas are packed too, but content.xml doesn't list them)
             foreach (var (_, w) in Data.Weapons)
             {
-                foreach (var (k, v) in w.Labels) allLabels[k] = v;
-                foreach (var (h, t) in w.LabelHashes)
-                    if (uint.TryParse(h, NumberStyles.Integer, CultureInfo.InvariantCulture, out var hv))
-                        allHashes[hv] = t;
+                if (!w.Disabled)
+                {
+                    foreach (var (k, v) in w.Labels) allLabels[k] = v;
+                    foreach (var (h, t) in w.LabelHashes)
+                        if (uint.TryParse(h, NumberStyles.Integer, CultureInfo.InvariantCulture, out var hv))
+                            allHashes[hv] = t;
+                }
                 foreach (var f in w.Files)
                 {
                     TextIo.WriteText(Path.Combine(f.Sub == "ai" ? ai : dataDir, f.Name), f.Content);
-                    entries.Add((f.Sub == "ai" ? $"common/data/ai/{f.Name}" : $"common/data/{f.Name}",
-                                 f.FType, f.Persistent));
+                    if (!w.Disabled)
+                        entries.Add((f.Sub == "ai" ? $"common/data/ai/{f.Name}" : $"common/data/{f.Name}",
+                                     f.FType, f.Persistent));
                 }
             }
 
@@ -444,7 +483,7 @@ public sealed class MergedPackSet
         if (dropped) Discover();
     }
 
-    private MergedPack? OwnerOf(string suffix) => Packs.FirstOrDefault(p => p.HasWeapon(suffix));
+    public MergedPack? OwnerOf(string suffix) => Packs.FirstOrDefault(p => p.HasWeapon(suffix));
 
     private MergedPack NewPack()
     {

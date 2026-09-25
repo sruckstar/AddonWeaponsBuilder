@@ -68,7 +68,13 @@
     <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushNormal}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="12" />
-    <Setter Property="Padding" Value="18,16" />
+    <Setter Property="Padding" Value="16,13" />
+  </Style>
+  <!-- pop-up card over the scrim (game choice, build log) -->
+  <Style Selector="Border.dialog">
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushStrong}" />
+    <Setter Property="BoxShadow" Value="0 18 48 0 #59000000" />
+    <Setter Property="Padding" Value="22,20" />
   </Style>
   <Style Selector="Border.note">
     <Setter Property="Background" Value="{DynamicResource GoldWashBrush}" />
@@ -169,6 +175,32 @@
     <Setter Property="Foreground" Value="{DynamicResource Text3Brush}" />
   </Style>
 
+  <!-- header chip (the game weapons go into) and the rows of the game dialog -->
+  <Style Selector="Button.chip, Button.pick">
+    <Setter Property="Background" Value="{DynamicResource Surface2Brush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushNormal}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Foreground" Value="{DynamicResource Text1Brush}" />
+    <Setter Property="CornerRadius" Value="9" />
+    <Setter Property="Padding" Value="12,6" />
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="LetterSpacing" Value="0" />
+  </Style>
+  <Style Selector="Button.pick">
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Padding" Value="12,8" />
+  </Style>
+  <Style Selector="Button.chip.missing">
+    <Setter Property="Background" Value="{DynamicResource GoldWashBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource GoldLineBrush}" />
+  </Style>
+  <Style Selector="Button.chip:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.pick:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource Surface3Brush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource GoldLineBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource Text1Brush}" />
+  </Style>
+
   <!-- ============ segmented control (RadioButton.seg inside Border.seg) ============ -->
   <Style Selector="Border.seg">
     <Setter Property="Background" Value="{DynamicResource InputBrush}" />
@@ -203,6 +235,27 @@
   </Style>
   <Style Selector="RadioButton.seg:checked">
     <Setter Property="Foreground" Value="{DynamicResource GoldBrightBrush}" />
+  </Style>
+
+  <!-- ============ colour swatch (RadioButton.swatch: the 3D preview's tints) ============ -->
+  <Style Selector="RadioButton.swatch">
+    <Setter Property="Cursor" Value="Hand" />
+    <Setter Property="Margin" Value="3" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Name="bd" Width="30" Height="30" CornerRadius="15" BorderThickness="2" BorderBrush="Transparent"
+                Background="Transparent">
+          <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="RadioButton.swatch:pointerover /template/ Border#bd">
+    <Setter Property="BorderBrush" Value="{DynamicResource GoldLineBrush}" />
+  </Style>
+  <Style Selector="RadioButton.swatch:checked /template/ Border#bd">
+    <Setter Property="BorderBrush" Value="{DynamicResource GoldBrush}" />
   </Style>
 
   <!-- ============ drop zone (player source) ============ -->

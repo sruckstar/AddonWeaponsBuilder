@@ -2,7 +2,6 @@
 bin/
 obj/
 publish/
-installer/out/
 *.exe
 *.dll
 *.pdb
@@ -17,9 +16,10 @@ installer/out/
 !data/plugins/*.asi
 !data/plugins/*.dll
 
-# --- tests and developer tools (not needed to build or run the app) ---
+# --- tests, developer tools and research prototypes (not needed to build or run the app) ---
 tests/
 tools/
+prototypes/
 TestResults/
 *.dev.slnx
 

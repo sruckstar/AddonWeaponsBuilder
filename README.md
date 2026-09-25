@@ -1,236 +1,208 @@
-# AddonWeapons Builder (C# / Avalonia)
+<p align="center">
+  <img src="docs/images/banner.png" alt="AddonWeapons Builder — any GTA V weapon mod as a real add-on weapon" width="100%">
+</p>
 
-Превращает **replace-сборку** оружия для GTA V (модели/текстуры, названные под
-существующее оружие) в **add-on DLC-пак**, который детектится нативами
-`GET_NUM_DLC_WEAPONS` / `GET_DLC_WEAPON_DATA` и появляется в меню скрипта
-AddonWeapons — без замены ванильных стволов. Работает с **GTA V Legacy и GTA V
-Enhanced** и умеет сразу установить пак в игру через папку `mods` — в том числе в
-«чистую» игру без OpenIV (см. «Legacy и Enhanced»).
+<p align="center">
+  <b>Turn any GTA V weapon mod into a real add-on weapon — and install it in one click.</b><br>
+  No more replacing the vanilla Pistol or Carbine Rifle. Keep every stock gun and add as many new ones as you like.
+</p>
 
-Это порт оригинального Python-проекта (`D:\awb`) на **.NET 10 + Avalonia 12 +
-SkiaSharp**. Ядро перенесено 1:1 и сверено с оригиналом (см. «Проверка»),
-интерфейс переделан.
+<p align="center">
+  <img alt="Windows 10/11 x64" src="https://img.shields.io/badge/Windows-10%20%2F%2011%20x64-1B1F26?style=for-the-badge&labelColor=0E1015">
+  <img alt="GTA V Legacy" src="https://img.shields.io/badge/GTA%20V-Legacy-D8B45A?style=for-the-badge&labelColor=0E1015">
+  <img alt="GTA V Enhanced" src="https://img.shields.io/badge/GTA%20V-Enhanced-D8B45A?style=for-the-badge&labelColor=0E1015">
+  <img alt="Nothing to install" src="https://img.shields.io/badge/.NET-not%20required-1B1F26?style=for-the-badge&labelColor=0E1015">
+</p>
+
+<p align="center">
+  <a href="#-for-players">For players</a> •
+  <a href="#-for-modders">For modders</a> •
+  <a href="#-getting-started">Getting started</a> •
+  <a href="#-faq">FAQ</a>
+</p>
+
+<p align="center">
+  <img src="docs/images/02-player-ready.png" alt="A weapon mod dropped into AddonWeapons Builder, ready to install" width="100%">
+</p>
 
 ---
 
-## Структура
+## Why
 
-```
-AddonWeaponsBuilder.slnx
-src/
-  Awb.Core/                  ядро (без UI), бывший пакет awb/
-    Templates.cs             библиотека шаблонов из ванильных meta     ← templates.py
-    Scanner.cs               классификация ассетов, резолв базового ствола ← scanner.py
-    Naming.cs                уникальный неймспейс, collision-safe     ← naming.py
-    MetaGenerator.cs         9 meta-файлов + сопоставление компонентов ← metagen.py
-    Overrides.cs             свои meta модера / готовый dlc.rpf       ← overrides.py
-    Gxt2.cs                  компилятор/ридер .gxt2                    ← gxt.py
-    Rpf/                     RPF7 writer/reader/verify/patch            ← rpf.py
-      ResourceEditions.cs    Legacy → Enhanced (gen9) конвертация моделей через CodeWalker (новое)
-      GameCrypto.cs          NG/AES-ключи из GTA5.exe / GTA5_Enhanced.exe для игровых архивов (новое)
-    GameEdition.cs           Legacy / Enhanced: определение по exe (новое)
-    DlcAssembler.cs          дерево dlcpack → dlc.rpf                   ← assembler.py
-    MergedPack.cs            общий пак AddonWeapons[N], лимит 3 ГБ      ← merge.py
-    GameInstaller.cs         подготовка игры (плагин, mods, update.rpf) + установка + dlclist.xml ← installer.py
-    ShopIds.cs               подбор свободного Shop ID                  ← shopid.py
-    Pipeline.cs              оркестрация сборки (3 маршрута)            ← pipeline.py
-    SourceIntake.cs          drop игрока: папка / zip / rar / 7z → плоская входная папка (новое)
-    Util/EtXml.cs            XML-сериализация как у Python ElementTree
-  Awb.Cli/                   awbctl — командная строка                  ← awbctl.py
-  Awb.App/                   AddonWeaponsBuilder.exe — GUI              ← awb_app.py + web/
-    Controls/                Skia-контролы: анимированный револьвер, эмблема
-    ViewModels/              MVVM (CommunityToolkit.Mvvm)
-    Services/                лог, диагностика (--diagnose), настройки
-data/                        ванильные meta + templates/ (133 ствола)
-  plugins/                   OpenIV.asi + dinput8.dll (Legacy), DSOUND.dll (Enhanced), xinput1_4.dll — для «чистой» игры
-external/CodeWalker/         git submodule (dexyfex/CodeWalker) — используется только CodeWalker.Core
-tests/Awb.Tests/             xUnit-тесты ядра и ViewModel
-tools/parity/                сверка с Python-оригиналом
-tools/Awb.UiSnapshot/        офскрин-рендер окна в PNG (Avalonia.Headless)
-installer/                   Inno Setup (тот же AppId, что у Python-версии)
-build.ps1                    тесты + self-contained публикация (+ zip / установщик)
-```
+Most GTA V weapon mods are **replacements**: the new model takes the place of a stock weapon, so the
+original gun is gone and two mods for the same slot can't live together. AddonWeapons Builder takes such a
+mod — exactly as you downloaded it — and turns it into a separate **add-on weapon** with its own name, store
+price and attachments. The game treats it like any other DLC weapon, so it shows up in add-on weapon menus
+such as the **AddonWeapons** script, right next to the vanilla arsenal.
 
-## Сборка и запуск
+---
 
-Нужен .NET SDK 10. CodeWalker подключён сабмодулем — клонировать с `--recursive`
-(или после клона: `git submodule update --init`).
+## 🎮 For players
 
-```powershell
-dotnet run --project src/Awb.App          # GUI
-dotnet test AddonWeaponsBuilder.dev.slnx  # тесты (tests/ и tools/ не входят в репозиторий)
-.\build.ps1 -Zip                           # publish\AddonWeaponsBuilder (+ zip), .NET на машине пользователя не нужен
-.\build.ps1 -Installer                     # + installer\out\AddonWeaponsBuilder-Setup-<ver>.exe (Inno Setup 6)
-```
+### Drop the mod. Check it. Install.
 
-## Использование
+<p align="center">
+  <img src="docs/images/01-drop-zone.png" alt="Drop zone: drag a weapon mod straight from your Downloads folder" width="100%">
+</p>
 
-### GUI
+1. **Drag the mod into the window** — the folder, or the `.zip` / `.rar` / `.7z` / `.oiv` you downloaded.
+   No unpacking, no hunting for the right files.
+2. **Look at it in 3D** and check the name, description and prices — they are already filled in from the mod.
+3. Press **Install into GTA V**. Done — start the game and buy the weapon.
 
-Одно окно, две вкладки-режима:
+### What you get
 
-* **For Modders** — сборка в выбранную папку: упакованный `dlc.rpf` или открытые
-  папки для CodeWalker; можно задать имя модели (`w_pi_mygun`).
-* **For Players** — сборка и установка прямо в GTA V (`mods/update/x64/dlcpacks` +
-  `dlclist.xml`), по умолчанию всё оружие складывается в один пак `AddonWeapons`.
-  Источник — **drop-зона**: мод перетаскивается в окно как скачан (папка, `.zip`,
-  `.rar`, `.7z`, `.oiv`, несколько файлов сразу) или выбирается кнопками
-  «Choose folder… / Choose archive…». Подробнее — «Источник в режиме игрока».
+- **🔫 Keep every vanilla weapon.** Mods are installed as new weapons, never over the stock ones. Install
+  ten revolvers if you want — they don't conflict.
+- **📦 Any download works as is.** Folders, zip, rar (incl. RAR5), 7z, OIV packages, multi-part archives and
+  archives inside archives. Models and textures are found in any sub-folder; readmes, screenshots and
+  "Original / Backup" folders are skipped automatically. If the mod ships a ready add-on `dlc.rpf`, that's
+  what gets installed.
+- **✍️ Store details filled in for you.** The weapon name, description, price, ammo price and attachment
+  prices are read from the mod itself. Change anything you like before installing.
+- **🧊 3D preview before you install.** Turn, zoom and inspect the weapon, switch attachments (magazines,
+  suppressors, scopes, flashlights, grips) and try the weapon's **tints** — see exactly what you're getting.
+- **🖱️ One-click install into GTA V Legacy _and_ Enhanced.** The app finds your game automatically (Rockstar
+  Games Launcher, Steam, Epic Games) and detects which edition it is. Mods made for the old game are
+  converted for **Enhanced** on the fly.
+- **🧹 Works on a clean game.** No mod setup yet? The app prepares it for you: the `mods` folder, the mod
+  loader for your edition and everything the game needs to load add-on weapons. Your original game archives
+  are not modified — all changes go into the `mods` folder.
+- **🗂️ One tidy pack for everything.** All weapons you install go into a single shared *AddonWeapons* DLC
+  instead of dozens of separate packs.
+- **✅ Switch weapons on and off.** The *Installed weapons* list shows everything you added. Untick a weapon
+  to disable it, press the bin to remove it — nothing changes in the game until you press *Apply*.
 
-Слева — источник, назначение, параметры оружия, цены компонентов (поле на каждый
-найденный магазин/глушитель/прицел). Справа — **анализ источника** (какой маршрут
-сборки, главная модель, базовое оружие, hi-lod, компоненты, предупреждения) и
-**живой лог сборки**. Во время сборки — анимированный револьвер (SkiaSharp), подпись
-показывает реальную фазу сборки. Результат — баннер с кнопкой «Open folder».
-Светлая/тёмная тема, выбранный режим и последние папки запоминаются.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/03-3d-preview.png" alt="3D preview with tints and attachments"></td>
+    <td width="50%"><img src="docs/images/07-3d-preview-light.png" alt="3D preview, light theme, stainless tint"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Inspect the model, attachments and tints</sub></td>
+    <td align="center"><sub>Light and dark themes</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="docs/images/04-installing.png" alt="Installing into GTA V"></td>
+    <td width="50%"><img src="docs/images/05-installed.png" alt="Installed — the weapon appears in the Installed weapons list"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Installing — the revolver keeps you company</sub></td>
+    <td align="center"><sub>Installed, and ready to switch on or off</sub></td>
+  </tr>
+</table>
 
-### Командная строка
+<p align="center">
+  <img src="docs/images/06-choose-game.png" alt="Choosing the game: installs found on this PC" width="100%">
+  <br><sub>Your GTA V installs are found automatically — Legacy or Enhanced, Rockstar, Steam or Epic</sub>
+</p>
 
-```bash
-awbctl build-templates [data_dir] [out_dir]
-awbctl scan  data/templates <input_folder>
-awbctl plan  data/templates <input_folder> --name "My Weapon"
-awbctl build data/templates <input_folder> <out_dir> \
-    --name "Vintage Pistol" --desc "A refined classic sidearm." \
-    --price 45000 --ammo-cost 120 --comp-price w_pi_x_mag1=800 \
-    [--model-name w_pi_mygun] [--no-pack] [--merge-pack] [--install-game-dir "D:\GTA V"] \
-    [--edition legacy|enhanced|auto]   # auto: по exe в --install-game-dir, иначе legacy
-awbctl verify <archive.rpf>        # самопроверка ресурсов готового архива (новое)
-```
+---
 
-## Legacy и Enhanced
+## 🛠️ For modders
 
-Контейнер RPF7 у обеих версий один и тот же: моды в папке `mods` — OPEN-архивы (CodeWalker
-для Gen9 пробовал `NONE` и вернулся к `OPEN`). Различаются **ресурсы внутри**: у Enhanced
-(gen9) свои версии и раскладка блоков — `.ydr/.ydd` v159 вместо 165, `.ytd` v5 вместо 13,
-`.yft` v171 вместо 162.
+Switch to **For Modders** and the same engine builds a complete add-on DLC into a folder of your choice —
+ready to publish, or to open in CodeWalker.
 
-* **Выбор версии.** В режиме игрока — автоматически по exe в папке игры (`GTA5.exe` →
-  Legacy, `GTA5_Enhanced.exe` → Enhanced), переключатель «Game version» можно поправить
-  вручную. В режиме моддера — переключатель (запоминается). CLI — `--edition`.
-* **Конвертация моделей.** Для Enhanced Legacy-модели конвертируются в gen9 при упаковке
-  (CodeWalker.Core, тот же код, что в CodeWalker Gen9 Converter), результат проверяется:
-  версия gen9 и страницы ровно по флагам. Уже gen9-модели не трогаются. Работает во всех
-  маршрутах: генерация, свои meta, loose-папки, общий пак, готовый `dlc.rpf` (перепаковывается,
-  всё кроме моделей — байт в байт). Обратной конвертации нет: gen9-модель в Legacy-пак —
-  понятная ошибка.
-* **Общий пак** хранится отдельно для каждой версии (`staging` — Legacy, как раньше,
-  `staging-enhanced` — Enhanced); исходные модели в staging не конвертируются.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/08-modder-light.png" alt="Modder mode, light theme"></td>
+    <td width="50%"><img src="docs/images/09-modder-dark.png" alt="Modder mode, dark theme"></td>
+  </tr>
+</table>
 
-### «Чистая» игра
+- **From replace files to a finished add-on.** Give it the `.ydr` / `.ytd` of a replace mod and it generates
+  the whole data stack: `weapons.meta`, components, archetypes, animations, shop and loadout entries,
+  `content.xml`, `setup2.xml` and the text labels (`global.gxt2`). Stats and handling come from the matching
+  vanilla weapon — 133 stock weapons are covered, with class-based templates for the rest.
+- **No name collisions.** Models and all identifiers are moved into a unique namespace, so the add-on never
+  clashes with vanilla content or with other add-ons. Or set your own model name (`w_pi_mygun`).
+- **Your metas win.** Ship your own `.meta` / `.xml` files and they go into the pack byte for byte; only the
+  missing pieces are generated, with names that match yours. Files are recognised by content, not by
+  extension — `weapons.meta.txt` works too.
+- **Attachments with prices.** Magazines, suppressors, scopes, flashlights, grips and barrels found in the
+  source are wired up as components, each with its own store price.
+- **Legacy or Enhanced output.** Build for either edition. For Enhanced, models are converted to the gen9
+  format and every converted resource is verified.
+- **Packed or loose.** Get a ready `dlc.rpf` or open folders to tweak and pack yourself. Every packed archive
+  is self-checked before it's handed to you, so a broken resource never ships.
+- **Know before you build.** The *Analysis* panel shows how the source will be built, the main model, the
+  base weapon, hi-LOD models, components and any warnings — plus a 3D preview of the model with its
+  attachments and tint palette, straight from the files or from a finished `dlc.rpf`.
+- **Command line included.** `awbctl` ships next to the app for scripting and batch builds:
 
-Если в папке игры нет ни одного из `OpenIV.asi`, `DSOUND.dll`, `OpenRPF.asi`,
-`RageOpenV.asi`, при установке:
+  ```bash
+  awbctl build data/templates <input_folder> <out_dir> --name "Vintage Pistol" --price 45000 --edition enhanced
+  awbctl verify <archive.rpf>
+  ```
 
-1. копируется плагин из `data/plugins`: `OpenIV.asi` для Legacy, `DSOUND.dll` для Enhanced
-   (загрузчик папки mods, сам себе прокси — ASI-лоадер ему не нужен). `OpenIV.asi` не умеет
-   Enhanced, поэтому в Enhanced он не считается и рядом ставится `DSOUND.dll`;
-2. если плагин — `.asi`, а ASI-лоадера (`dinput8.dll`, `xinput1_4.dll`, `version.dll`, …) нет,
-   ставится лоадер Alexander Blade из `data/plugins`: `dinput8.dll` для Legacy, `xinput1_4.dll`
-   для Enhanced (например, если в Enhanced стоит только `RageOpenV.asi` / `OpenRPF.asi`);
-3. создаётся папка `mods`;
-4. `update\update.rpf` копируется в `mods\update\update.rpf` (2–3 ГБ, только первый раз,
-   с проверкой свободного места);
-5. при первой правке `dlclist.xml` скопированный архив переводится из игрового NG-шифрования
-   в OPEN — как это делают OpenIV/CodeWalker: TOC расшифровывается ключами, найденными в
-   `GTA5.exe` / `GTA5_Enhanced.exe` (по SHA1, как в CodeWalker; ключей в программе нет),
-   остальные записи остаются как есть. Если новый `dlclist.xml` не влезает в свои секторы,
-   запись переносится в конец архива.
+  Run `awbctl` without arguments for the full list of commands and options.
 
-Если `mods\update\update.rpf` — распакованная папка без `dlclist.xml`, он берётся из
-игрового `update.rpf`.
+---
 
-## Источник в режиме игрока (drop-зона)
+## 🚀 Getting started
 
-`SourceIntake` распаковывает то, что бросили в окно, в `%LOCALAPPDATA%\AddonWeaponsBuilder\sources\<id>\`
-(хранится только последний drop) и собирает из него плоскую входную папку, которую
-конвейер обрабатывает как обычно — сам конвейер не менялся.
+1. Download `AddonWeaponsBuilder-<version>-win-x64.zip` from the [Releases](../../releases) page.
+2. Unzip it anywhere and run **`AddonWeaponsBuilder.exe`**. There is no installer and nothing else to set up —
+   .NET is bundled.
+3. Pick **For Players** to install weapons into your game, or **For Modders** to build a DLC into a folder.
 
-* **Архивы**: zip, rar (включая RAR5), 7z (включая solid), `.oiv` (это zip), многотомные
-  (`.part1.rar`, `.7z.001`), архивы внутри архивов — до 3 уровней. Из архива извлекается
-  только нужное (модели, `.rpf`, текст, вложенные архивы); картинки и прочее не трогаются.
-  Защита от zip-slip, лимит 8 ГБ распакованного, понятные ошибки для запароленного или
-  битого архива.
-* **Модели и текстуры** (`.ydr/.ytd/.ydd/.yft` с заголовком RSC7) ищутся на любой глубине.
-  Если в моде есть `w_*`-ассеты, прочие (`hud.ytd`, педы, пропы) пропускаются. Папки-бэкапы
-  оригинала (`Original`, `Vanilla`, `Backup`, `Old`, `Default`, `Uninstall`…) не используются.
-  Одноимённые файлы из разных папок: одинаковые — молча схлопываются, разные (2K/4K, цвета) —
-  берётся первый вариант, в анализе — предупреждение, какую папку дропнуть отдельно.
-* **Конфиги vs текст** — по содержимому, а не по расширению: `.meta/.xml/.txt`, у которого
-  корневой XML-тег — игровой data-файл (`CWeaponInfoBlob`, `CWeaponComponentInfoBlob`,
-  `content.xml`, `setup2.xml`…), — это конфиг мода, он уходит в пак **как есть** (побайтно;
-  `weapons.meta.txt` → `weapons.meta`), шаблоны для этого слота не генерируются. Readme,
-  инструкции, `assembly.xml` из OIV — пропускаются. Кусок конфига без корня («добавьте в
-  weapons.meta…») — пропускается с предупреждением: установить его «как есть» нельзя.
-* **Конфиги Replace-мода** — `weapons.meta`/`weaponcomponents.meta`/`weaponanimations.meta`/
-  `weaponarchetypes.meta`, где всё объявленное — ванильное (`WEAPON_PISTOL`, …), — не ставятся:
-  они переопределили бы стоковый ствол. Для add-on генерируются свои meta.
-* **Готовый `dlc.rpf`** (RPF с `setup2.xml` в корне) где угодно внутри — побеждает
-  россыпь моделей (Add-On + Replace версии в одном архиве). Прочие `.rpf` пропускаются.
-* Имя оружия и имя пака берутся из имени архива/папки без мусора:
-  `Glock_17_[4K]_v1.2.zip` → «Glock 17».
+**You need:** Windows 10 or 11 (x64) and GTA V for PC — Legacy or Enhanced. To buy and equip add-on weapons
+in the game, use a menu that lists DLC weapons, for example the **AddonWeapons** script.
 
-## Маршруты сборки (как в оригинале)
+---
 
-| Во входной папке | Что происходит |
-|---|---|
-| только `.ydr/.ytd` | базовое оружие по шаблону → генерируется весь стек meta, модели переименовываются в неймспейс `_awXXXXXX` |
-| модели + свои `.meta/.xml` | свои файлы идут как есть (классификация по корневому тегу), недостающие генерируются с согласованными именами; модели не переименовываются |
-| готовый `dlc.rpf` | ставится как есть, либо (общий пак) распаковывается и вливается в `AddonWeapons` |
+## ❓ FAQ
 
-После упаковки каждый `dlc.rpf` проходит самопроверку: каждый RSC7-ресурс должен
-распаковываться ровно в размер страниц из флагов (ловит двойное сжатие).
+<details>
+<summary><b>Will it break my game or overwrite my files?</b></summary>
 
-## Проверка переноса
+No. Weapons are installed into the `mods` folder, and the original game archives stay untouched. To undo an
+install, remove the weapon in the *Installed weapons* list.
+</details>
 
-* **Паритет с Python** — `tools/parity/parity_check.py` гоняет 17 одинаковых
-  сценариев через оригинальный `build_addon` и через `awbctl`: loose/packed,
-  fallback по классу, свои meta, готовый `dlc.rpf`, ресурс > 16 МБ, кириллическое
-  имя, 4 последовательных merge в общий пак (включая импорт dlc.rpf), установка в
-  игру с `update.rpf` папкой и архивом. Сравниваются все meta побайтно, все записи
-  RPF (порядок TOC, имена, флаги, распакованные данные), manifest-ы, `dlclist.xml`
-  и строки лога — **всё совпадает**.
-* `awbctl build-templates` генерирует библиотеку шаблонов, **идентичную** Python
-  (133 JSON, включая `raw_xml`).
-* Архивы C#-версии проходят Python-валидатор и наоборот; C#-валидатор находит
-  двойное сжатие в `dlc-problem.rpf`.
-* xUnit-тесты: GXT2, RPF (round-trip, двойное сжатие, большие записи, патч на
-  месте, шифрованные архивы), имена, сканер, meta, dlclist, общий пак (переполнение
-  3 ГБ-лимита, восстановление из вшитого `_pack.json`), валидация формы и сквозная
-  сборка через команду ViewModel; drop игрока — вложенные папки, solid-7z с zip внутри,
-  запароленный/битый архив, конфиги под `.txt`, фрагменты, Replace-конфиги, варианты,
-  готовый `dlc.rpf` в архиве, сквозная сборка + установка из zip.
+<details>
+<summary><b>Do I need OpenIV or a mod loader?</b></summary>
 
-Совместимость с данными Python-версии сохранена: тот же `%LOCALAPPDATA%\AddonWeaponsBuilder`
-(staging общего пака, логи), тот же формат `_pack.json`/`manifest.json`, тот же AppId установщика.
+No. If the game has no mod support yet, the app sets it up during the first install — with the right loader
+for Legacy or Enhanced. If a `mods`-folder loader that suits your edition is already there (OpenIV.asi,
+RageOpenV, OpenRPF and similar), it's left as it is.
+</details>
 
-## Отличия от Python-версии
+<details>
+<summary><b>The mod I downloaded is for Legacy, but I play Enhanced. Will it work?</b></summary>
 
-* RPF пишется потоково (данные → потом TOC): пак до 3 ГБ не держится в памяти
-  целиком; `update.rpf` патчится на месте, без чтения всего архива в память;
-  вложенные архивы читаются «окном» родительского файла, без временных файлов.
-* Импортированные из готового `dlc.rpf` meta пишутся с нормальным CRLF (Python
-  из-за двойной трансляции писал `\r\r\n`).
-* Защита от тихой порчи архива: имя файла вне Latin-1 и таблица имён > 64 КБ дают
-  понятную ошибку вместо битого TOC.
-* Размеры `dlc.rpf` на байты отличаются — другая реализация DEFLATE (содержимое то же).
-* Лог сборки виден всегда (раньше — только при ошибке); анализ источника до сборки.
-* Режим игрока: drop-зона (папка или архив zip/rar/7z) вместо выбора папки с оружием.
-* Не переносилось то, что было нужно только Python-стеку: проверки WebView2 /
-  .NET Framework, снятие Mark-of-the-Web, Nuitka-скрипты, собственный Python-установщик
-  (`awb_installer.py`). Их заменяют self-contained публикация и Inno Setup.
+Yes. Models made for the old game are converted for Enhanced automatically while installing. (The other way
+round — Enhanced-only models into Legacy — isn't possible.)
+</details>
 
-## Лог и диагностика
+<details>
+<summary><b>Can I use it in GTA Online?</b></summary>
 
-* Лог: `%LOCALAPPDATA%\AddonWeaponsBuilder\logs\awb.log` (кнопка «Log file» в окне).
-* `AddonWeaponsBuilder.exe --diagnose` — отчёт о системе и целостности `data/`.
-* Любой сбой старта показывает MessageBox и пишется в лог.
+No — add-on weapons are for story mode. Don't go online with a modded game.
+</details>
 
-## Известные ограничения
+<details>
+<summary><b>Where are the weapons in the game?</b></summary>
 
-* Собираемые архивы — OPEN; зашифрованные игрой (NG/AES) архивы читаются только при
-  установке (нужен exe игры в той же папке).
-* Конвертация Enhanced → Legacy невозможна (её нет и в CodeWalker).
-* Библиотека шаблонов — ванильные стволы; для DLC-оружия без точного шаблона
-  используется структурный шаблон класса.
-* Финальную загрузку пака стоит проверить в игре.
+Add-on weapons are real DLC weapons, so they appear in menus that list DLC weapons, such as the AddonWeapons
+script.
+</details>
+
+<details>
+<summary><b>Something went wrong — where do I look?</b></summary>
+
+Press **Log** in the top bar to see what happened during the last build or install. The full log file is one
+click away from there — attach it when reporting a problem.
+</details>
+
+---
+
+## 🙏 Credits
+
+- [CodeWalker](https://github.com/dexyfex/CodeWalker) by dexyfex — resource reading and gen9 conversion.
+- **OpenIV.asi** by the OpenIV team and the **ASI Loader** by Alexander Blade — mod support for GTA V Legacy.
+- **Simple Mods Loader** (`DSOUND.dll`) by NativeCoder — mod support for GTA V Enhanced.
+
+Grand Theft Auto V is a trademark of Take-Two Interactive / Rockstar Games. This project is not affiliated
+with or endorsed by them.

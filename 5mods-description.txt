@@ -1,0 +1,92 @@
+<b>Turn any GTA V weapon mod into a real add-on weapon — and install it in one click.</b>
+No more replacing the vanilla Pistol or Carbine Rifle. Keep every stock gun and add as many new ones as you like.
+
+Works with <b>GTA V Legacy</b> and <b>GTA V Enhanced</b>. Nothing to install — just unzip and run.
+
+<b><u>WHY</u></b>
+Most GTA V weapon mods are <i>replacements</i>: the new model takes the place of a stock weapon, so the original gun is gone and two mods for the same slot can't live together. <b>AddonWeapons Builder</b> takes such a mod — exactly as you downloaded it — and turns it into a separate <b>add-on weapon</b> with its own name, store price and attachments. The game treats it like any other DLC weapon, so it shows up in add-on weapon menus such as the <b>AddonWeapons</b> script, right next to the vanilla arsenal.
+
+<b><u>FOR PLAYERS</u></b>
+<b>Drop the mod. Check it. Install.</b>
+<ol>
+<li><b>Drag the mod into the window</b> — the folder, or the .zip / .rar / .7z / .oiv you downloaded. No unpacking, no hunting for the right files.</li>
+<li><b>Look at it in 3D</b> and check the name, description and prices — they are already filled in from the mod.</li>
+<li>Press <b>Install into GTA V</b>. Done — start the game and buy the weapon.</li>
+</ol>
+<b>What you get:</b>
+<ul>
+<li><b>Keep every vanilla weapon.</b> Mods are installed as new weapons, never over the stock ones. Install ten revolvers if you want — they don't conflict.</li>
+<li><b>Any download works as is.</b> Folders, zip, rar (incl. RAR5), 7z, OIV packages, multi-part archives and archives inside archives. Models and textures are found in any sub-folder; readmes, screenshots and "Original / Backup" folders are skipped automatically. If the mod ships a ready add-on dlc.rpf, that's what gets installed.</li>
+<li><b>Store details filled in for you.</b> The weapon name, description, price, ammo price and attachment prices are read from the mod itself. Change anything you like before installing.</li>
+<li><b>3D preview before you install.</b> Turn, zoom and inspect the weapon, switch attachments (magazines, suppressors, scopes, flashlights, grips) and try the weapon's tints — see exactly what you're getting.</li>
+<li><b>One-click install into GTA V Legacy and Enhanced.</b> The app finds your game automatically (Rockstar Games Launcher, Steam, Epic Games) and detects which edition it is. Mods made for the old game are converted for Enhanced on the fly.</li>
+<li><b>Works on a clean game.</b> No mod setup yet? The app prepares it for you: the mods folder, the mod loader for your edition and everything the game needs to load add-on weapons. Your original game archives are not modified — all changes go into the mods folder.</li>
+<li><b>One tidy pack for everything.</b> All weapons you install go into a single shared <i>AddonWeapons</i> DLC instead of dozens of separate packs.</li>
+<li><b>Switch weapons on and off.</b> The <i>Installed weapons</i> list shows everything you added. Untick a weapon to disable it, press the bin to remove it — nothing changes in the game until you press <i>Apply</i>.</li>
+<li><b>Light and dark themes.</b></li>
+</ul>
+
+<b><u>FOR MODDERS</u></b>
+Switch to <b>For Modders</b> and the same engine builds a complete add-on DLC into a folder of your choice — ready to publish, or to open in CodeWalker.
+<ul>
+<li><b>From replace files to a finished add-on.</b> Give it the .ydr / .ytd of a replace mod and it generates the whole data stack: weapons.meta, components, archetypes, animations, shop and loadout entries, content.xml, setup2.xml and the text labels (global.gxt2). Stats and handling come from the matching vanilla weapon — 133 stock weapons are covered, with class-based templates for the rest.</li>
+<li><b>No name collisions.</b> Models and all identifiers are moved into a unique namespace, so the add-on never clashes with vanilla content or with other add-ons. Or set your own model name (w_pi_mygun).</li>
+<li><b>Your metas win.</b> Ship your own .meta / .xml files and they go into the pack byte for byte; only the missing pieces are generated, with names that match yours. Files are recognised by content, not by extension — weapons.meta.txt works too.</li>
+<li><b>Attachments with prices.</b> Magazines, suppressors, scopes, flashlights, grips and barrels found in the source are wired up as components, each with its own store price.</li>
+<li><b>Legacy or Enhanced output.</b> Build for either edition. For Enhanced, models are converted to the gen9 format and every converted resource is verified.</li>
+<li><b>Packed or loose.</b> Get a ready dlc.rpf or open folders to tweak and pack yourself. Every packed archive is self-checked before it's handed to you, so a broken resource never ships.</li>
+<li><b>Know before you build.</b> The <i>Analysis</i> panel shows how the source will be built, the main model, the base weapon, hi-LOD models, components and any warnings — plus a 3D preview of the model with its attachments and tint palette, straight from the files or from a finished dlc.rpf.</li>
+<li><b>Command line included.</b> awbctl.exe ships next to the app for scripting and batch builds (for example: <i>awbctl build data/templates &lt;input_folder&gt; &lt;out_dir&gt; --name "Vintage Pistol" --price 45000 --edition enhanced</i>). Run awbctl without arguments for the full list of commands and options.</li>
+</ul>
+
+<b><u>REQUIREMENTS</u></b>
+<ul>
+<li>Windows 10 or 11 (x64).</li>
+<li>GTA V for PC — Legacy or Enhanced.</li>
+<li>To buy and equip add-on weapons in the game — a menu that lists DLC weapons, for example the <b>AddonWeapons</b> script.</li>
+</ul>
+
+<b><u>INSTALLATION</u></b>
+<ol>
+<li>Unzip the archive anywhere (not inside the game folder).</li>
+<li>Run <b>AddonWeaponsBuilder.exe</b>. There is no installer and nothing else to set up — .NET is bundled.</li>
+<li>Pick <b>For Players</b> to install weapons into your game, or <b>For Modders</b> to build a DLC into a folder.</li>
+</ol>
+
+<b><u>FAQ</u></b>
+<b>Will it break my game or overwrite my files?</b>
+No. Weapons are installed into the mods folder, and the original game archives stay untouched. To undo an install, remove the weapon in the <i>Installed weapons</i> list.
+
+<b>Do I need OpenIV or a mod loader?</b>
+No. If the game has no mod support yet, the app sets it up during the first install — with the right loader for Legacy or Enhanced. If a mods-folder loader that suits your edition is already there (OpenIV.asi, RageOpenV, OpenRPF and similar), it's left as it is.
+
+<b>The mod I downloaded is for Legacy, but I play Enhanced. Will it work?</b>
+Yes. Models made for the old game are converted for Enhanced automatically while installing. (The other way round — Enhanced-only models into Legacy — isn't possible.)
+
+<b>Can I use it in GTA Online?</b>
+No — add-on weapons are for story mode. Don't go online with a modded game.
+
+<b>Where are the weapons in the game?</b>
+Add-on weapons are real DLC weapons, so they appear in menus that list DLC weapons, such as the AddonWeapons script.
+
+<b>Something went wrong — where do I look?</b>
+Press <b>Log</b> in the top bar to see what happened during the last build or install. The full log file is one click away from there — attach it to your comment when reporting a problem.
+
+<b><u>CREDITS</u></b>
+<ul>
+<li><a href="https://github.com/dexyfex/CodeWalker">CodeWalker</a> by dexyfex — resource reading and gen9 conversion.</li>
+<li><b>OpenIV.asi</b> by the OpenIV team and the <b>ASI Loader</b> by Alexander Blade — mod support for GTA V Legacy.</li>
+<li><b>Simple Mods Loader</b> (DSOUND.dll) by NativeCoder — mod support for GTA V Enhanced.</li>
+</ul>
+
+<b><u>CHANGELOG</u></b>
+<b>2.0.0</b>
+<ul>
+<li>Rewritten from scratch as a native Windows app — no .NET, WebView2 or Python needed.</li>
+<li>GTA V Enhanced support, including automatic conversion of Legacy models.</li>
+<li>Drag &amp; drop of mods as downloaded: folders, zip, rar, 7z, oiv.</li>
+<li>3D preview with attachments and tints.</li>
+<li>Automatic game detection and mod setup for a clean game.</li>
+<li>Installed weapons list: switch weapons on/off or remove them.</li>
+<li>Store details filled in from the mod.</li>
+</ul>

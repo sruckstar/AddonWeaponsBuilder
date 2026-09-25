@@ -32,6 +32,7 @@
           <SolidColorBrush x:Key="SuccessBrush" Color="#7FC08A" />
           <SolidColorBrush x:Key="SuccessWashBrush" Color="#1F7FC08A" />
           <SolidColorBrush x:Key="StageBrush" Color="#F40C0E12" />
+          <SolidColorBrush x:Key="ScrimBrush" Color="#B8080A0D" />
           <LinearGradientBrush x:Key="GoldGradient" StartPoint="0%,0%" EndPoint="100%,100%">
             <GradientStop Offset="0" Color="#ECCB74" />
             <GradientStop Offset="0.52" Color="#D0A447" />
@@ -84,6 +85,7 @@
           <SolidColorBrush x:Key="SuccessBrush" Color="#3F8A4C" />
           <SolidColorBrush x:Key="SuccessWashBrush" Color="#1A3F8A4C" />
           <SolidColorBrush x:Key="StageBrush" Color="#F4ECE8DF" />
+          <SolidColorBrush x:Key="ScrimBrush" Color="#80282216" />
           <LinearGradientBrush x:Key="GoldGradient" StartPoint="0%,0%" EndPoint="100%,100%">
             <GradientStop Offset="0" Color="#D3A949" />
             <GradientStop Offset="0.55" Color="#B98D33" />

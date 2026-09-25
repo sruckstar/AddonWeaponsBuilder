@@ -1,16 +1,14 @@
 <#
   build.ps1 — publish AddonWeapons Builder as a self-contained Windows x64 folder
-  (no .NET install needed on the user's machine), optionally zipped and/or wrapped
-  in an Inno Setup installer.
+  (no .NET install needed on the user's machine), optionally zipped. The app ships
+  as that open folder / zip — there is no installer.
 
     .\build.ps1                 # tests + publish to .\publish\AddonWeaponsBuilder
     .\build.ps1 -Zip            # ... and AddonWeaponsBuilder-<ver>-win-x64.zip
-    .\build.ps1 -Installer      # ... and installer\out\AddonWeaponsBuilder-Setup-<ver>.exe (needs Inno Setup 6)
     .\build.ps1 -SkipTests
 #>
 param(
     [switch]$Zip,
-    [switch]$Installer,
     [switch]$SkipTests,
     [string]$Runtime = "win-x64"
 )
@@ -53,13 +51,4 @@ if ($Zip) {
     if (Test-Path $zipPath) { Remove-Item $zipPath }
     Compress-Archive -Path "$out\*" -DestinationPath $zipPath
     Write-Host "Zip -> $zipPath"
-}
-
-if ($Installer) {
-    $iscc = @("$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
-              "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-              "$env:ProgramFiles\Inno Setup 6\ISCC.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
-    if (-not $iscc) { throw "Inno Setup 6 (ISCC.exe) not found" }
-    & $iscc "/DMyAppVersion=$version" installer\AddonWeaponsBuilder.iss
-    if ($LASTEXITCODE -ne 0) { throw "installer build failed" }
 }

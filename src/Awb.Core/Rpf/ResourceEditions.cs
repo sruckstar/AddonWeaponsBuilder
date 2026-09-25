@@ -122,6 +122,34 @@ public static class ResourceEditions
         return converted;
     }
 
+    /// <summary>
+    /// Parse a loose RSC7 resource — compressed as on disk, or inflated as an archive read
+    /// returns it — with CodeWalker: <paramref name="load"/> gets the page data and its entry.
+    /// The reader is told whether the resource is gen9 through the same process-wide static
+    /// the converter flips.
+    /// </summary>
+    public static T Read<T>(byte[] raw, string name, Func<byte[], RpfFileEntry, T> load)
+    {
+        bool gen9 = EditionOf(Path.GetExtension(name), Version(raw)) == GameEdition.Enhanced;
+        var data = raw;
+        var entry = RpfFile.CreateResourceFileEntry(ref data, 0);
+        long virt = Rpf7.ResVirtualSize(entry.SystemFlags) + Rpf7.ResVirtualSize(entry.GraphicsFlags);
+        if (data.Length != virt) data = ResourceBuilder.Decompress(data);
+        lock (Gate)
+        {
+            bool was = RpfManager.IsGen9;
+            RpfManager.IsGen9 = gen9;
+            try
+            {
+                return load(data, entry);
+            }
+            finally
+            {
+                RpfManager.IsGen9 = was;
+            }
+        }
+    }
+
     private static byte[]? Load<T>(T file, Action<T> load, Func<T, object?> root, Func<T, byte[]> save)
     {
         load(file);

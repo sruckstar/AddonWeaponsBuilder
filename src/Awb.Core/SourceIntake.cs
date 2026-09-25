@@ -32,6 +32,8 @@ public sealed class IntakeResult
     public List<IntakeFile> Models { get; } = [];
     public List<IntakeFile> Configs { get; } = [];
     public IntakeFile? PrebuiltRpf { get; set; }
+    /// <summary>Text tables and package descriptions (.gxt2 / .oxt / .lua / OIV assembly.xml) — full paths.</summary>
+    public List<string> TextTables { get; } = [];
     /// <summary>Files looked at and left out (readmes, fragments, backups, replace-mod configs…).</summary>
     public List<string> Ignored { get; } = [];
     public List<string> Warnings { get; } = [];
@@ -69,6 +71,8 @@ public static partial class SourceIntake
     [GeneratedRegex(@"(?<![a-z])v?\d+(\.\d+)+[a-z]?(?![a-z])|(?<![a-z])v\d+(?![a-z])", RegexOptions.IgnoreCase)]
     private static partial Regex VersionRe();
     [GeneratedRegex(@"[\s_.\-+]+")] private static partial Regex SeparatorsRe();
+    /// <summary>gta5-mods.com prefixes downloads with a file id: "74d207-slick_rubbergunmod_v3.zip".</summary>
+    [GeneratedRegex(@"^[0-9a-f]{6}-(?=[^\s-])")] private static partial Regex DownloadIdRe();
     [GeneratedRegex(@"<Item\s+type=""CWeapon|<Item\s+key=""WEAPON_|<weaponShopItems|<modelName>|<CWeaponInfo", RegexOptions.IgnoreCase)]
     private static partial Regex FragmentRe();
 
@@ -288,7 +292,7 @@ public static partial class SourceIntake
         var name = parts[^1];
         var ext = PathUtil.SuffixLower(name);
         bool wanted = InputScanner.ResourceExt.Contains(ext) || ext == ".rpf" || ArchiveExt.Contains(ext)
-                      || (TextExt.Contains(ext) && entry.Size <= MaxTextBytes);
+                      || ((TextExt.Contains(ext) || StoreInfoReader.TextTableExt.Contains(ext)) && entry.Size <= MaxTextBytes);
         if (!wanted) return null;
         if (entry.IsEncrypted)
             throw new IntakeException($"«{origin}» is password-protected — unpack it yourself and drop the folder.");
@@ -358,6 +362,8 @@ public static partial class SourceIntake
             if (ext == ".rpf") rpfs.Add(c);
             else if (InputScanner.ResourceExt.Contains(ext)) resources.Add(c);
             else if (TextExt.Contains(ext)) texts.Add(c);
+            if (StoreInfoReader.TextTableExt.Contains(ext) || c.Name.Equals("assembly.xml", StringComparison.OrdinalIgnoreCase))
+                r.TextTables.Add(c.FullPath);
         }
 
         // ---- a finished add-on pack wins: the pipeline installs / merges it as-is
@@ -561,7 +567,7 @@ public static partial class SourceIntake
 
     // ------------------------------------------------------------------ naming
 
-    /// <summary>"Glock_17_[4K]_v1.2.rar" → "Glock 17".</summary>
+    /// <summary>"Glock_17_[4K]_v1.2.rar" / "396767-Glock 17.7z" → "Glock 17".</summary>
     public static string GuessName(IReadOnlyList<string> sources)
     {
         foreach (var s in sources)
@@ -587,7 +593,8 @@ public static partial class SourceIntake
 
     internal static string CleanName(string raw)
     {
-        var s = BracketsRe().Replace(raw, " ");
+        var s = DownloadIdRe().Replace(raw, "");
+        s = BracketsRe().Replace(s, " ");
         s = VersionRe().Replace(s, " ");
         s = SeparatorsRe().Replace(s, " ");
         s = Regex.Replace(s, @"\s+", " ").Trim();

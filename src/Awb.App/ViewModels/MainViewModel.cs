@@ -42,14 +42,16 @@ public sealed partial class MainViewModel : ObservableObject
 {
     public const string DefaultName = "Custom Weapon";
     public const string DefaultDesc = "An add-on weapon.";
+    public const string DefaultPrice = "5000";
+    public const string DefaultAmmoPrice = "100";
 
     private readonly Settings _settings;
     private readonly StringBuilder _log = new();
     private int _scanGeneration;
     private int _prepGeneration;
     private CancellationTokenSource? _prepCts;
-    /// <summary>The last name filled in from a source — replaced by the next one unless edited.</summary>
-    private string? _suggestedName;
+    /// <summary>Field → the value last filled in from a source; replaced by the next source unless edited.</summary>
+    private readonly Dictionary<string, string> _suggested = [];
 
     /// <summary>Folder picker supplied by the view: (title) → chosen path or null.</summary>
     public Func<string, Task<string?>>? PickFolder { get; set; }
@@ -68,13 +70,13 @@ public sealed partial class MainViewModel : ObservableObject
         IsEnhanced = settings.Edition == "enhanced";
         GameFolder = settings.LastGame ?? "";
         IsDark = settings.Theme != "light";
+        IsGameDialogOpen = IsPlayer && !HasGame;          // a player starts by choosing the game
     }
 
     // ================================================================ mode / theme
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsModder), nameof(BuildButtonText), nameof(DestinationTitle),
-                              nameof(DestinationHint), nameof(ModelNameVisible))]
+    [NotifyPropertyChangedFor(nameof(IsModder), nameof(BuildButtonText), nameof(ModelNameVisible))]
     public partial bool IsPlayer { get; set; }
 
     public bool IsModder
@@ -91,6 +93,8 @@ public sealed partial class MainViewModel : ObservableObject
         else IsEnhanced = _settings.Edition == "enhanced";
         // each mode has its own source: the modder's folder path / the player's drop
         _ = AnalyzeSourceAsync(ActiveInput);
+        _ = RefreshInstalledAsync();
+        IsGameDialogOpen = value && !HasGame;
     }
 
     [ObservableProperty] public partial bool IsDark { get; set; }
@@ -108,10 +112,6 @@ public sealed partial class MainViewModel : ObservableObject
     private void ToggleTheme() => IsDark = !IsDark;
 
     public string BuildButtonText => IsPlayer ? "Install into GTA V" : "Build Add-On";
-    public string DestinationTitle => IsPlayer ? "INSTALLATION" : "DESTINATION";
-    public string DestinationHint => IsPlayer
-        ? "Install the Add-On straight into your GTA V."
-        : "Where to save the finished Add-On.";
 
     // ================================================================ source
 
@@ -317,6 +317,7 @@ public sealed partial class MainViewModel : ObservableObject
         }
 
         IsScanning = true;
+        ClearPreview();
         SourceAnalysis? a = null;
         var intake = IsPlayer ? Intake : null;
         try
@@ -335,9 +336,7 @@ public sealed partial class MainViewModel : ObservableObject
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(Name) || Name == DefaultName || Name == _suggestedName)
-            Name = a.SuggestedName;
-        _suggestedName = a.SuggestedName;
+        ApplyStoreInfo(a);
 
         PrebuiltRpf = a.PrebuiltRpf;
         SuppliedMetas = a.Metas;
@@ -352,14 +351,43 @@ public sealed partial class MainViewModel : ObservableObject
 
         Components.Clear();
         foreach (var c in a.Components)
-            Components.Add(new ComponentPriceViewModel { Stem = c.Stem, Label = c.Label, Kind = c.Kind });
+            Components.Add(new ComponentPriceViewModel
+            {
+                Stem = c.Stem, Label = c.Label, Kind = c.Kind,
+                Price = a.Store.ComponentPrices.TryGetValue(c.Stem, out var cost) ? cost.ToString(CultureInfo.InvariantCulture) : "",
+            });
         HasComponents = Components.Count > 0;
         UpdateSourceNotice();
+        await LoadPreviewAsync(folder);
+    }
+
+    /// <summary>
+    /// Start the form from what the source says about its weapon (the mod's own name,
+    /// description and prices, else the folder name and the defaults). A field the user
+    /// edited keeps the edit; one still holding the previous source's value follows the new one.
+    /// </summary>
+    private void ApplyStoreInfo(SourceAnalysis a)
+    {
+        var s = a.Store;
+        Name = Suggest(nameof(Name), Name, DefaultName, a.SuggestedName);
+        Description = Suggest(nameof(Description), Description, DefaultDesc, s.Description);
+        Price = Suggest(nameof(Price), Price, DefaultPrice, s.Price?.ToString(CultureInfo.InvariantCulture));
+        AmmoPrice = Suggest(nameof(AmmoPrice), AmmoPrice, DefaultAmmoPrice, s.AmmoPrice?.ToString(CultureInfo.InvariantCulture));
+    }
+
+    private string Suggest(string field, string current, string fallback, string? found)
+    {
+        var next = string.IsNullOrWhiteSpace(found) ? fallback : found;
+        bool untouched = string.IsNullOrWhiteSpace(current) || current == fallback
+                         || (_suggested.TryGetValue(field, out var prev) && current == prev);
+        _suggested[field] = next;
+        return untouched ? next : current;
     }
 
     private void ResetAnalysis(string? error)
     {
         IsScanning = false;
+        ClearPreview();
         PrebuiltRpf = null;
         SuppliedMetas = null;
         Analysis.Clear();
@@ -403,7 +431,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>Pack for GTA V Enhanced (gen9 models) instead of Legacy.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsLegacy))]
+    [NotifyPropertyChangedFor(nameof(IsLegacy), nameof(GameChipTitle))]
     public partial bool IsEnhanced { get; set; }
 
     public bool IsLegacy
@@ -420,7 +448,11 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnIsEnhancedChanged(bool value)
     {
-        if (IsPlayer) return;                            // the player's choice follows the game folder
+        if (IsPlayer)
+        {
+            _ = RefreshInstalledAsync();                 // each edition stages its own shared pack
+            return;                                      // the player's choice follows the game folder
+        }
         var stored = value ? "enhanced" : "legacy";
         if (_settings.Edition == stored) return;
         _settings.Edition = stored;
@@ -460,7 +492,12 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnGameFolderChanged(string value)
     {
         Remember(value.Trim(), _settings.LastGame, v => _settings.LastGame = v);
-        if (IsPlayer) DetectGameEdition(value);
+        NotifyGameChanged();
+        if (IsPlayer)
+        {
+            DetectGameEdition(value);
+            _ = RefreshInstalledAsync();
+        }
     }
     partial void OnOutputFolderChanged(string value) => Remember(value.Trim(), _settings.LastOutput, v => _settings.LastOutput = v);
 
@@ -491,8 +528,8 @@ public sealed partial class MainViewModel : ObservableObject
 
     [ObservableProperty] public partial string Name { get; set; } = DefaultName;
     [ObservableProperty] public partial string Description { get; set; } = DefaultDesc;
-    [ObservableProperty] public partial string Price { get; set; } = "5000";
-    [ObservableProperty] public partial string AmmoPrice { get; set; } = "100";
+    [ObservableProperty] public partial string Price { get; set; } = DefaultPrice;
+    [ObservableProperty] public partial string AmmoPrice { get; set; } = DefaultAmmoPrice;
     [ObservableProperty] public partial string ModelName { get; set; } = "";
 
     /// <summary>Renaming the model is a modder concern; players never see it.</summary>
@@ -533,7 +570,7 @@ public sealed partial class MainViewModel : ObservableObject
     // ================================================================ build
 
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(BuildCommand))]
+    [NotifyCanExecuteChangedFor(nameof(BuildCommand), nameof(ApplyInstalledCommand))]
     public partial bool IsBuilding { get; set; }
 
     [ObservableProperty] public partial string StageStatus { get; set; } = "";
@@ -559,6 +596,11 @@ public sealed partial class MainViewModel : ObservableObject
     private async Task Build()
     {
         ResultVisible = false;
+        if (IsPlayer && !HasGame)
+        {
+            IsGameDialogOpen = true;                   // nowhere to install yet — ask for the game
+            return;
+        }
         var (opts, error) = GatherOptions();
         if (opts is null)
         {
@@ -610,6 +652,7 @@ public sealed partial class MainViewModel : ObservableObject
         {
             IsBuilding = false;
         }
+        if (IsPlayer) await RefreshInstalledAsync();
     }
 
     /// <summary>Validate the form into build options (mirrors the original backend checks).</summary>

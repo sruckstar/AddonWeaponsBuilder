@@ -229,7 +229,9 @@ public static partial class Pipeline
         if (o.InstallGameDir is not null)
         {
             if (!result.Packed) throw new InvalidOperationException("Installation not possible: dlc.rpf was not packed.");
-            GameInstaller.InstallToGame(o.InstallGameDir, result.DlcRpf!, Path.GetFileName(result.Root), log);
+            var folder = Path.GetFileName(result.Root);
+            GameInstaller.InstallToGame(o.InstallGameDir, result.DlcRpf!, folder, log);
+            InstalledMods.RegisterPack(o.InstallGameDir, folder, o.Name, edition);
             result.InstalledTo = o.InstallGameDir;
         }
         return result;
@@ -349,9 +351,19 @@ public static partial class Pipeline
             log($"    {imported.Assets.Count} model(s), {imported.Metas.Count} meta file(s), " +
                 $"{imported.LabelHashes.Count} text label(s).");
 
-            var ms = OpenPackSet(o.OutDir, o.InstallGameDir, log);
             var packName = string.IsNullOrEmpty(folderName) ? o.Name : folderName;
             var suffix = new Namer(packName).Suffix;
+
+            // a name the user typed beats one derived from the weapon hash; the archive's
+            // folder name (the GUI's suggestion) is no weapon name
+            string? shown = o.Name == folderName || o.Name == "Custom Weapon" ? null : o.Name;
+            var completed = Overrides.CompleteShopEntries(imported, suffix.Replace("_", "").ToUpperInvariant(), shown, o.Desc,
+                                                          o.Price, o.AmmoCost, o.ShopId ?? DefaultShopId);
+            if (completed.Count > 0)
+                log($"    No shop entry for {string.Join(", ", completed)} — generated shop_weapon.meta, " +
+                    "contentunlocks.meta and name labels so weapon menus (GET_NUM_DLC_WEAPONS) list it.");
+
+            var ms = OpenPackSet(o.OutDir, o.InstallGameDir, log);
             ms.AddPrebuilt(suffix, packName, imported);
             return FinishMerged(ms, o.InstallGameDir, edition, log);
         }
@@ -400,6 +412,7 @@ public static partial class Pipeline
         if (o.InstallGameDir is not null)
         {
             var installed = GameInstaller.InstallToGame(o.InstallGameDir, dlcRpf, dlcName, log);
+            InstalledMods.RegisterPack(o.InstallGameDir, dlcName, o.Name, edition);
             if (converted) dlcRpf = installed;                  // the temp copy is about to go
             return new BuildResult
             {

@@ -9,7 +9,9 @@ public sealed class SourceAnalysis
 {
     public sealed record Component(string Stem, string Label, string Kind);
 
-    public string SuggestedName { get; private init; } = "";
+    public string SuggestedName { get; private set; } = "";
+    /// <summary>Name, description and prices the mod itself gives the weapon.</summary>
+    public StoreInfo Store { get; private set; } = new();
     public string? PrebuiltRpf { get; private set; }
     public IReadOnlyList<string>? Metas { get; private set; }
     public string RouteBadge { get; private set; } = "";
@@ -27,6 +29,7 @@ public sealed class SourceAnalysis
             SuggestedName = intake?.DisplayName ?? Path.GetFileName(Path.TrimEndingDirectorySeparator(folder)),
         };
         if (intake is not null) AddIntakeRows(intake, a);
+        ReadStoreInfo(folder, intake, a);
 
         var rpf = Overrides.FindPrebuiltRpf(folder);
         if (rpf is not null)
@@ -88,6 +91,26 @@ public sealed class SourceAnalysis
         AddIgnoredRow(intake, a);
         a.Warnings.AddRange(scan.Warnings);
         return a;
+    }
+
+    /// <summary>What the mod says about its own weapon — the form starts from it.</summary>
+    private static void ReadStoreInfo(string folder, IntakeResult? intake, SourceAnalysis a)
+    {
+        try
+        {
+            a.Store = StoreInfoReader.Read(folder, intake?.TextTables);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("store info failed", ex);
+            return;
+        }
+        if (a.Store.Name is { } name) a.SuggestedName = name;
+        // a finished pack lists no components, so its component prices fill nothing
+        bool comps = a.Store.ComponentPrices.Count > 0 && Overrides.FindPrebuiltRpf(folder) is null;
+        var fields = a.Store.FieldsSummary(comps);
+        if (fields.Length > 0)
+            a.Rows.Add(new("From the mod", $"{fields}  ·  {string.Join(", ", a.Store.Sources)}"));
     }
 
     private static void AddIntakeRows(IntakeResult intake, SourceAnalysis a)

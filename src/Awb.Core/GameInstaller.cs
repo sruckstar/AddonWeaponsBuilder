@@ -221,10 +221,25 @@ public static partial class GameInstaller
         return text[..m.Index] + insertion + text[(m.Index + m.Length)..];
     }
 
-    private static void AddToDlclistFile(string dlclist, string dlcName, Action<string> log)
+    /// <summary>dlclist.xml text with the pack entry removed, or null if it wasn't listed.</summary>
+    public static string? DlclistWithoutEntry(string text, string dlcName, Action<string> log)
     {
-        var text = TextIo.ReadText(dlclist);
-        var updated = DlclistWithEntry(text, dlcName, log);
+        var entryPath = $"dlcpacks:/{dlcName}/";
+        // the whole line: its indent and line break go with it
+        var re = new Regex(@"^[ \t]*<Item>\s*" + Regex.Escape(entryPath) + @"\s*</Item>[ \t]*\r?\n?",
+                           RegexOptions.Multiline | RegexOptions.IgnoreCase);
+        if (!re.IsMatch(text))
+        {
+            log($"    dlclist.xml: '{entryPath}' not listed — nothing to remove.");
+            return null;
+        }
+        log($"    dlclist.xml: removed '<Item>{entryPath}</Item>'.");
+        return re.Replace(text, "");
+    }
+
+    private static void EditDlclistFile(string dlclist, Func<string, string?> edit)
+    {
+        var updated = edit(TextIo.ReadText(dlclist));
         if (updated is not null) TextIo.WriteText(dlclist, updated);
     }
 
@@ -242,12 +257,11 @@ public static partial class GameInstaller
         }
     }
 
-    private static void AddToDlclistRpf(string gameDir, string updateRpf, string dlcName, Action<string> log)
+    private static void EditDlclistRpf(string gameDir, string updateRpf, Func<string, string?> edit, Action<string> log)
     {
         GameCrypto? crypto = null;
         var raw = WithKeys(gameDir, log, ref crypto, c => RpfTools.ReadInnerFile(updateRpf, DlclistInner, c));
-        var text = TextIo.DecodeUtf8Sig(raw);
-        var updated = DlclistWithEntry(text, dlcName, log);
+        var updated = edit(TextIo.DecodeUtf8Sig(raw));
         if (updated is null) return;
 
         var info = RpfTools.PatchInnerFile(updateRpf, DlclistInner, Encoding.UTF8.GetBytes(updated), crypto);
@@ -273,7 +287,16 @@ public static partial class GameInstaller
     /// Separate from the copy so an unchanged pack can be re-registered cheaply.
     /// </summary>
     /// <exception cref="FileNotFoundException">mods, update.rpf or dlclist.xml is missing</exception>
-    public static void RegisterInDlclist(string gameDir, string dlcName, Action<string> log)
+    public static void RegisterInDlclist(string gameDir, string dlcName, Action<string> log) =>
+        EditDlclist(gameDir, text => DlclistWithEntry(text, dlcName, log), createFromGame: true, log);
+
+    /// <summary>Remove <c>dlcpacks:/&lt;dlcName&gt;/</c> from the game's dlclist.xml (no-op if not listed).</summary>
+    public static void UnregisterFromDlclist(string gameDir, string dlcName, Action<string> log) =>
+        EditDlclist(gameDir, text => DlclistWithoutEntry(text, dlcName, log), createFromGame: false, log);
+
+    /// <param name="edit">new dlclist.xml text, or null to leave it untouched</param>
+    /// <param name="createFromGame">a loose update.rpf folder without its own dlclist.xml gets the game's copy first</param>
+    private static void EditDlclist(string gameDir, Func<string, string?> edit, bool createFromGame, Action<string> log)
     {
         var mods = Path.Combine(gameDir, "mods");
         if (!Directory.Exists(mods))
@@ -287,6 +310,7 @@ public static partial class GameInstaller
             var dlclist = Path.Combine(updateRpf, "common", "data", "dlclist.xml");
             if (!File.Exists(dlclist))
             {
+                if (!createFromGame) return;                 // nothing of ours can be listed there
                 // a loose-file update.rpf (override folder) without its own dlclist.xml:
                 // start it from the game's copy
                 if (!File.Exists(Path.Combine(gameDir, "update", "update.rpf")))
@@ -298,12 +322,12 @@ public static partial class GameInstaller
                 TextIo.WriteText(dlclist, text);
                 log($"    dlclist.xml taken from the game's update.rpf -> {dlclist}");
             }
-            AddToDlclistFile(dlclist, dlcName, log);
+            EditDlclistFile(dlclist, edit);
         }
         else if (File.Exists(updateRpf))
         {
             log($"    update.rpf is an archive, editing dlclist.xml inside: {updateRpf}");
-            AddToDlclistRpf(gameDir, updateRpf, dlcName, log);
+            EditDlclistRpf(gameDir, updateRpf, edit, log);
         }
         else
         {
@@ -318,12 +342,80 @@ public static partial class GameInstaller
     {
         log($"Installing into game: {gameDir}");
         RegisterInDlclist(gameDir, dlcName, log);
-        var destDir = Path.Combine(gameDir, "mods", "update", "x64", "dlcpacks", dlcName);
+        var destDir = PackDir(gameDir, dlcName);
         Directory.CreateDirectory(destDir);
         var dest = Path.Combine(destDir, "dlc.rpf");
         PathUtil.Copy2(dlcRpf, dest);
         log($"    dlc.rpf copied -> {dest}");
+        // a switched-off copy of an earlier version is superseded by this one
+        var parked = DisabledPackDir(gameDir, dlcName);
+        if (Directory.Exists(parked))
+        {
+            PathUtil.DeleteDir(parked);
+            log($"    Removed the switched-off earlier copy: {parked}");
+        }
         log("Add-On installed. Launch the game and check the weapon in the shop.");
         return dest;
+    }
+
+    // ================================================================ switching packs off / removing them
+
+    /// <summary><c>&lt;game&gt;/mods/update/x64/dlcpacks</c></summary>
+    public static string DlcpacksDir(string gameDir) => Path.Combine(gameDir, "mods", "update", "x64", "dlcpacks");
+
+    /// <summary>Where a switched-off pack is parked: beside dlcpacks, so nothing that scans it finds the pack.</summary>
+    public static string DisabledDlcpacksDir(string gameDir) =>
+        Path.Combine(gameDir, "mods", "update", "x64", "dlcpacks_disabled");
+
+    public static string PackDir(string gameDir, string dlcName) => Path.Combine(DlcpacksDir(gameDir), dlcName);
+    public static string DisabledPackDir(string gameDir, string dlcName) => Path.Combine(DisabledDlcpacksDir(gameDir), dlcName);
+
+    /// <summary>
+    /// Switch an installed dlcpack off without deleting it: its dlclist.xml entry is
+    /// removed, and the pack folder is moved from dlcpacks to dlcpacks_disabled — the
+    /// DSOUND.dll loader adds every folder in dlcpacks to the list on its own.
+    /// </summary>
+    public static void DisablePack(string gameDir, string dlcName, Action<string> log)
+    {
+        log($"Switching off '{dlcName}'…");
+        UnregisterFromDlclist(gameDir, dlcName, log);
+        var live = PackDir(gameDir, dlcName);
+        if (!Directory.Exists(live)) return;
+        var parked = DisabledPackDir(gameDir, dlcName);
+        if (Directory.Exists(parked)) PathUtil.DeleteDir(parked);
+        Directory.CreateDirectory(DisabledDlcpacksDir(gameDir));
+        Directory.Move(live, parked);
+        log($"    Pack moved aside (kept for switching back on) -> {parked}");
+    }
+
+    /// <summary>Undo <see cref="DisablePack"/>: the pack goes back to dlcpacks and into dlclist.xml.</summary>
+    public static void EnablePack(string gameDir, string dlcName, Action<string> log)
+    {
+        log($"Switching on '{dlcName}'…");
+        var live = PackDir(gameDir, dlcName);
+        var parked = DisabledPackDir(gameDir, dlcName);
+        if (Directory.Exists(parked))
+        {
+            if (Directory.Exists(live)) PathUtil.DeleteDir(live);
+            Directory.CreateDirectory(DlcpacksDir(gameDir));
+            Directory.Move(parked, live);
+            log($"    Pack moved back -> {live}");
+        }
+        if (!File.Exists(Path.Combine(live, "dlc.rpf")))
+            throw new FileNotFoundException($"The switched-off pack '{dlcName}' is gone from the game folder — install it again.");
+        RegisterInDlclist(gameDir, dlcName, log);
+    }
+
+    /// <summary>Remove a dlcpack from the game entirely: dlclist.xml entry and its folder (on or off).</summary>
+    public static void UninstallPack(string gameDir, string dlcName, Action<string> log)
+    {
+        log($"Removing '{dlcName}' from the game…");
+        UnregisterFromDlclist(gameDir, dlcName, log);
+        foreach (var dir in new[] { PackDir(gameDir, dlcName), DisabledPackDir(gameDir, dlcName) })
+            if (Directory.Exists(dir))
+            {
+                PathUtil.DeleteDir(dir);
+                log($"    Deleted {dir}");
+            }
     }
 }
