@@ -42,7 +42,7 @@ src/
     ViewModels/              MVVM (CommunityToolkit.Mvvm)
     Services/                лог, диагностика (--diagnose), настройки
 data/                        ванильные meta + templates/ (133 ствола)
-  plugins/                   OpenIV.asi (Legacy), RageOpenV.asi (Enhanced) — ставятся в «чистую» игру
+  plugins/                   OpenIV.asi + dinput8.dll (Legacy), DSOUND.dll (Enhanced), xinput1_4.dll — для «чистой» игры
 external/CodeWalker/         git submodule (dexyfex/CodeWalker) — используется только CodeWalker.Core
 tests/Awb.Tests/             xUnit-тесты ядра и ViewModel
 tools/parity/                сверка с Python-оригиналом
@@ -122,13 +122,16 @@ awbctl verify <archive.rpf>        # самопроверка ресурсов �
 Если в папке игры нет ни одного из `OpenIV.asi`, `DSOUND.dll`, `OpenRPF.asi`,
 `RageOpenV.asi`, при установке:
 
-1. копируется плагин из `data/plugins`: `OpenIV.asi` для Legacy, `RageOpenV.asi` для Enhanced;
-   если нет ASI-лоадера (`dinput8.dll`, `xinput1_4.dll`, …) — предупреждение в логе
-   (для Legacy нужен `dinput8.dll`, для Enhanced — `xinput1_4.dll`: ScriptHookV или Ultimate ASI Loader);
-2. создаётся папка `mods`;
-3. `update\update.rpf` копируется в `mods\update\update.rpf` (2–3 ГБ, только первый раз,
+1. копируется плагин из `data/plugins`: `OpenIV.asi` для Legacy, `DSOUND.dll` для Enhanced
+   (загрузчик папки mods, сам себе прокси — ASI-лоадер ему не нужен). `OpenIV.asi` не умеет
+   Enhanced, поэтому в Enhanced он не считается и рядом ставится `DSOUND.dll`;
+2. если плагин — `.asi`, а ASI-лоадера (`dinput8.dll`, `xinput1_4.dll`, `version.dll`, …) нет,
+   ставится лоадер Alexander Blade из `data/plugins`: `dinput8.dll` для Legacy, `xinput1_4.dll`
+   для Enhanced (например, если в Enhanced стоит только `RageOpenV.asi` / `OpenRPF.asi`);
+3. создаётся папка `mods`;
+4. `update\update.rpf` копируется в `mods\update\update.rpf` (2–3 ГБ, только первый раз,
    с проверкой свободного места);
-4. при первой правке `dlclist.xml` скопированный архив переводится из игрового NG-шифрования
+5. при первой правке `dlclist.xml` скопированный архив переводится из игрового NG-шифрования
    в OPEN — как это делают OpenIV/CodeWalker: TOC расшифровывается ключами, найденными в
    `GTA5.exe` / `GTA5_Enhanced.exe` (по SHA1, как в CodeWalker; ключей в программе нет),
    остальные записи остаются как есть. Если новый `dlclist.xml` не влезает в свои секторы,

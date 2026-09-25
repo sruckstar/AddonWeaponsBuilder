@@ -214,8 +214,8 @@
                   <TextBlock Classes="hint">
                     <Run Text="Installs into " /><Run Text="mods/update/x64/dlcpacks" FontWeight="SemiBold" />
                     <Run Text=" and registers the pack in dlclist.xml. A game without mod support gets it set up: " />
-                    <Run Text="OpenIV.asi" FontWeight="SemiBold" /><Run Text=" (Legacy) or " />
-                    <Run Text="RageOpenV.asi" FontWeight="SemiBold" /><Run Text=" (Enhanced), the " />
+                    <Run Text="OpenIV.asi" FontWeight="SemiBold" /><Run Text=" + ASI loader (Legacy) or " />
+                    <Run Text="DSOUND.dll" FontWeight="SemiBold" /><Run Text=" (Enhanced), the " />
                     <Run Text="mods" FontWeight="SemiBold" /><Run Text=" folder and a copy of update.rpf." />
                   </TextBlock>
                   <CheckBox IsChecked="{Binding MergePack}">

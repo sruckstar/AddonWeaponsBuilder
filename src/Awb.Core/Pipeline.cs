@@ -31,7 +31,7 @@ public sealed class BuildOptions
     /// or Legacy when not installing.
     /// </summary>
     public GameEdition? Edition { get; init; }
-    /// <summary>Bundled mods-folder plugins (OpenIV.asi / RageOpenV.asi). Null = DataDir/plugins.</summary>
+    /// <summary>Bundled mods-folder plugins and ASI loaders (OpenIV.asi, DSOUND.dll, dinput8.dll, xinput1_4.dll). Null = DataDir/plugins.</summary>
     public string? PluginsDir { get; init; }
 }
 

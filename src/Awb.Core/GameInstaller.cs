@@ -9,7 +9,7 @@ namespace Awb.Core;
 /// Installs a finished dlc.rpf into the GTA V game folder, mirroring a manual Add-On
 /// install through the mods folder:
 /// <code>
-/// &lt;game&gt;/OpenIV.asi | RageOpenV.asi | …           a mods-folder plugin (installed if none is there)
+/// &lt;game&gt;/OpenIV.asi + dinput8.dll | DSOUND.dll    a mods-folder plugin (installed if none is there)
 /// &lt;game&gt;/mods/                                   created if missing
 /// &lt;game&gt;/mods/update/update.rpf                     copied from the game on first install
 /// &lt;game&gt;/mods/update/update.rpf/common/data/dlclist.xml   gets &lt;Item&gt;dlcpacks:/&lt;DLC&gt;/&lt;/Item&gt;
@@ -27,15 +27,25 @@ public static partial class GameInstaller
     /// <summary>Plugins that give the game a mods folder — any one of them is enough.</summary>
     public static readonly string[] ModFolderPlugins = ["OpenIV.asi", "DSOUND.dll", "OpenRPF.asi", "RageOpenV.asi"];
 
-    /// <summary>Proxy DLLs that load *.asi plugins (ScriptHookV / Ultimate ASI Loader names).</summary>
+    /// <summary>
+    /// Proxy DLLs that load *.asi plugins (ScriptHookV / Ultimate ASI Loader names).
+    /// dsound.dll is not among them: in a GTA V folder that name is the DSOUND mods loader.
+    /// </summary>
     public static readonly string[] AsiLoaders =
-        ["dinput8.dll", "xinput1_4.dll", "dsound.dll", "version.dll", "winmm.dll", "winhttp.dll", "d3d11.dll"];
+        ["dinput8.dll", "xinput1_4.dll", "version.dll", "winmm.dll", "winhttp.dll", "d3d11.dll"];
 
-    /// <summary>The plugin shipped in data/plugins for an edition.</summary>
-    public static string BundledPlugin(GameEdition e) => e == GameEdition.Enhanced ? "RageOpenV.asi" : "OpenIV.asi";
+    /// <summary>
+    /// The mods-folder plugin shipped in data/plugins for an edition: OpenIV.asi for Legacy;
+    /// for Enhanced the DSOUND.dll mods loader, a self-loading proxy that needs no ASI loader.
+    /// </summary>
+    public static string BundledPlugin(GameEdition e) => e == GameEdition.Enhanced ? "DSOUND.dll" : "OpenIV.asi";
 
-    /// <summary>The ASI loader to recommend for an edition (RageOpenV readme).</summary>
-    public static string RecommendedAsiLoader(GameEdition e) => e == GameEdition.Enhanced ? "xinput1_4.dll" : "dinput8.dll";
+    /// <summary>The ASI loader shipped in data/plugins for an edition (Alexander Blade's GTA V / GTA V Enhanced loader).</summary>
+    public static string BundledAsiLoader(GameEdition e) => e == GameEdition.Enhanced ? "xinput1_4.dll" : "dinput8.dll";
+
+    /// <summary>Plugins that can't serve an edition's mods folder (OpenIV.asi predates Enhanced).</summary>
+    private static bool Serves(string plugin, GameEdition e) =>
+        !(e == GameEdition.Enhanced && plugin.Equals("OpenIV.asi", StringComparison.OrdinalIgnoreCase));
 
     [GeneratedRegex(@"([ \t]*)</Paths>")] private static partial Regex PathsCloseRe();
     [GeneratedRegex(@"\n([ \t]*)<Item>")] private static partial Regex ItemIndentRe();
@@ -75,7 +85,7 @@ public static partial class GameInstaller
 
     /// <summary>
     /// Make the game able to take add-on packs: a mods-folder plugin (the bundled
-    /// OpenIV.asi / RageOpenV.asi when the game has none), the mods folder, and
+    /// OpenIV.asi + ASI loader / DSOUND.dll when the game has none), the mods folder, and
     /// mods/update/update.rpf copied from the game. Idempotent.
     /// </summary>
     /// <param name="pluginsDir">folder with the bundled plugins (data/plugins)</param>
@@ -88,29 +98,49 @@ public static partial class GameInstaller
         EnsureUpdateRpf(gameDir, log);
     }
 
-    /// <summary>Install the bundled mods-folder plugin when the game has none of <see cref="ModFolderPlugins"/>.</summary>
+    /// <summary>
+    /// Install the bundled mods-folder plugin when the game has none of
+    /// <see cref="ModFolderPlugins"/> that works for its edition, and the bundled ASI loader
+    /// when the plugin is an .asi and nothing in the folder would load it.
+    /// </summary>
     public static void EnsureModFolderPlugin(string gameDir, GameEdition edition, string pluginsDir, Action<string> log)
     {
         var present = ModFolderPlugins.Where(p => File.Exists(Path.Combine(gameDir, p))).ToList();
-        if (present.Count == 0)
+        var usable = present.Where(p => Serves(p, edition)).ToList();
+        if (usable.Count == 0)
         {
             var plugin = BundledPlugin(edition);
-            var src = Path.Combine(pluginsDir, plugin);
-            if (!File.Exists(src))
-                throw new FileNotFoundException(
-                    $"The game has no mods-folder plugin ({string.Join(", ", ModFolderPlugins)}) and the " +
-                    $"bundled {plugin} is missing: {src}. Reinstall AddonWeapons Builder.");
-            PathUtil.Copy2(src, Path.Combine(gameDir, plugin));
+            if (present.Count > 0)
+                log($"    {string.Join(" / ", present)} can't load the mods folder of {edition.DisplayName()}.");
+            CopyBundled(gameDir, pluginsDir, plugin,
+                        $"The game has no mods-folder plugin ({string.Join(", ", ModFolderPlugins)})");
             log($"    Installed {plugin} into the game folder — it lets {edition.DisplayName()} load the mods folder.");
-            present.Add(plugin);
+            usable.Add(plugin);
         }
 
-        // an .asi does nothing on its own: something has to load it
-        bool selfLoading = present.Any(p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
-        if (!selfLoading && !AsiLoaders.Any(l => File.Exists(Path.Combine(gameDir, l))))
-            log($"    [!] No ASI loader in the game folder — {string.Join(" / ", present)} will not be loaded " +
+        // an .asi does nothing on its own: something has to load it (DSOUND.dll loads itself)
+        bool selfLoading = usable.Any(p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+        if (selfLoading || AsiLoaders.Any(l => File.Exists(Path.Combine(gameDir, l)))) return;
+
+        var loader = BundledAsiLoader(edition);
+        if (!File.Exists(Path.Combine(pluginsDir, loader)))
+        {
+            log($"    [!] No ASI loader in the game folder — {string.Join(" / ", usable)} will not be loaded " +
                 $"and the game will ignore the mods folder. Install ScriptHookV or Ultimate ASI Loader " +
-                $"({RecommendedAsiLoader(edition)} for {edition.DisplayName()}).");
+                $"({loader} for {edition.DisplayName()}).");
+            return;
+        }
+        CopyBundled(gameDir, pluginsDir, loader, "No ASI loader in the game folder");
+        log($"    Installed the ASI loader {loader} — it loads {string.Join(" / ", usable)} into {edition.DisplayName()}.");
+    }
+
+    private static void CopyBundled(string gameDir, string pluginsDir, string name, string why)
+    {
+        var src = Path.Combine(pluginsDir, name);
+        if (!File.Exists(src))
+            throw new FileNotFoundException(
+                $"{why} and the bundled {name} is missing: {src}. Reinstall AddonWeapons Builder.");
+        PathUtil.Copy2(src, Path.Combine(gameDir, name));
     }
 
     public static void EnsureModsFolder(string gameDir, Action<string> log)

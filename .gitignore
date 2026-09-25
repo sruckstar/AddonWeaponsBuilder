@@ -12,9 +12,10 @@ installer/out/
 *.rpf
 *.nupkg
 
-# ...except the ASI loaders the app installs into the game folder
+# ...except the mods-folder plugins and ASI loaders the app installs into the game folder
 !data/plugins/
 !data/plugins/*.asi
+!data/plugins/*.dll
 
 # --- tests and developer tools (not needed to build or run the app) ---
 tests/

@@ -54,7 +54,8 @@ public static class Diagnostics
         sb.AppendLine($"Data folder  : {AppPaths.AppData}");
         foreach (var rel in new[] { "data/templates/_index.json", "data/weapons.meta", "data/weaponcomponents.meta",
                                     "data/weaponarchetypes.meta", "data/weaponanimations.meta",
-                                    "data/plugins/OpenIV.asi", "data/plugins/RageOpenV.asi",
+                                    "data/plugins/OpenIV.asi", "data/plugins/dinput8.dll",
+                                    "data/plugins/DSOUND.dll", "data/plugins/xinput1_4.dll",
                                     "ShadersGen9Conversion.xml" })
         {
             var ok = File.Exists(Path.Combine(AppPaths.Root, rel));
