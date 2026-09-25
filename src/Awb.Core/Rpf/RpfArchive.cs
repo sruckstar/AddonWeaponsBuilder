@@ -28,6 +28,9 @@ public sealed class RpfEntry
 
     /// <summary>Stored uncompressed (a nested archive, or an oversized/uncompressed binary).</summary>
     public bool StoredRaw => !IsResource && TocSize == 0;
+
+    /// <summary>A binary entry encrypted by the game (TOC word 0xC = 1).</summary>
+    public bool IsEncrypted => !IsDir && !IsResource && XC == 1;
 }
 
 /// <summary>A path inside an archive tree.</summary>
@@ -37,26 +40,35 @@ public sealed record RpfTreeItem(string Path, RpfEntry Entry)
 }
 
 /// <summary>
-/// Reader for RPF7-OPEN archives (GTA V Legacy / OpenIV). Works directly on a
-/// stream: only the header and TOC are read up front, file contents on demand, and
-/// a nested archive stored raw is opened in place as a window of the parent stream.
+/// Reader for RPF7 archives — the same container in GTA V Legacy and Enhanced. Works
+/// directly on a stream: only the header and TOC are read up front, file contents on
+/// demand, and a nested archive stored raw is opened in place as a window of the
+/// parent stream. OPEN (mod) archives need nothing else; the game's own NG/AES
+/// encrypted archives are read when <see cref="GameCrypto"/> keys are supplied.
 /// </summary>
 public sealed class RpfArchive : IDisposable
 {
     private readonly Stream _stream;
     private readonly bool _ownsStream;
     private readonly byte[] _names;
+    private readonly byte[] _toc;
+    private readonly GameCrypto? _crypto;
 
     public string Name { get; }
     /// <summary>Absolute offset of this archive's header within the stream.</summary>
     public long BaseOffset { get; }
     public long Length { get; }
+    /// <summary>Header encryption word: OPEN (mods), NG / AES (the game's own archives), 0 = none.</summary>
+    public uint Encryption { get; private set; }
+    /// <summary>The TOC is encrypted (not OPEN / none).</summary>
+    public bool IsTocEncrypted => Encryption is not (Rpf7.EncOpen or GameCrypto.EncNone);
     public IReadOnlyList<RpfEntry> Entries { get; }
 
-    private RpfArchive(Stream stream, bool owns, long baseOffset, long length, string name)
+    private RpfArchive(Stream stream, bool owns, long baseOffset, long length, string name, GameCrypto? crypto)
     {
         _stream = stream;
         _ownsStream = owns;
+        _crypto = crypto;
         BaseOffset = baseOffset;
         Length = length;
         Name = name;
@@ -70,10 +82,11 @@ public sealed class RpfArchive : IDisposable
         uint enc = BinaryPrimitives.ReadUInt32LittleEndian(hdr.AsSpan(12));
         if (magic != Rpf7.Magic)
             throw new RpfFormatException($"not an RPF7 archive (magic=0x{magic:x})");
-        if (enc != Rpf7.EncOpen)
-            throw new RpfFormatException(
-                $"{name}: RPF encryption 0x{enc:x} is not OPEN — only unencrypted " +
-                "(GTA V Legacy / OpenIV) archives are supported.");
+        Encryption = enc;
+        if (IsTocEncrypted && crypto is null)
+            throw new RpfEncryptedException(
+                $"{name}: the archive is encrypted by the game (0x{enc:x}) — it can only be read " +
+                "with the keys from the game's executable.");
         if (count < 0 || count > 10_000_000 || namesLen < 0)
             throw new RpfFormatException($"{name}: corrupt RPF header");
 
@@ -82,6 +95,14 @@ public sealed class RpfArchive : IDisposable
         _names = ReadAt(tocPos + count * 16L, namesLen);
         if (toc.Length < count * 16)
             throw new RpfFormatException($"{name}: truncated RPF table of contents");
+        if (IsTocEncrypted)
+        {
+            toc = crypto!.DecryptArchiveBlock(toc, enc, name, (uint)length);
+            _names = crypto.DecryptArchiveBlock(_names, enc, name, (uint)length);
+            if (count > 0 && BinaryPrimitives.ReadUInt32LittleEndian(toc.AsSpan(4)) != Rpf7.DirMarker)
+                throw new RpfFormatException($"{name}: decrypting the table of contents failed (wrong keys?)");
+        }
+        _toc = toc;
 
         var entries = new List<RpfEntry>(count);
         for (int i = 0; i < count; i++)
@@ -123,13 +144,13 @@ public sealed class RpfArchive : IDisposable
         Entries = entries;
     }
 
-    public static RpfArchive Open(string path, bool writable = false)
+    public static RpfArchive Open(string path, bool writable = false, GameCrypto? crypto = null)
     {
         var fs = new FileStream(path, FileMode.Open, writable ? FileAccess.ReadWrite : FileAccess.Read,
                                 writable ? FileShare.Read : FileShare.ReadWrite, 1 << 16);
         try
         {
-            return new RpfArchive(fs, true, 0, fs.Length, Path.GetFileName(path));
+            return new RpfArchive(fs, true, 0, fs.Length, Path.GetFileName(path), crypto);
         }
         catch
         {
@@ -138,15 +159,28 @@ public sealed class RpfArchive : IDisposable
         }
     }
 
-    public static RpfArchive Open(byte[] data, string name) =>
-        new(new MemoryStream(data, writable: false), true, 0, data.Length, name);
+    public static RpfArchive Open(byte[] data, string name, GameCrypto? crypto = null) =>
+        new(new MemoryStream(data, writable: false), true, 0, data.Length, name, crypto);
 
     /// <summary>Open a nested archive entry: in place when stored raw, otherwise inflated to memory.</summary>
     public RpfArchive OpenNested(RpfEntry e)
     {
-        if (e.StoredRaw)
-            return new RpfArchive(_stream, false, e.Offset, e.X8, e.Name);
-        return Open(ReadContent(e), e.Name);
+        if (e.StoredRaw && !e.IsEncrypted)
+            return new RpfArchive(_stream, false, e.Offset, e.X8, e.Name, _crypto);
+        return Open(ReadContent(e), e.Name, _crypto);
+    }
+
+    /// <summary>The on-disk bytes of a file entry, decrypted when the game encrypted it (still compressed).</summary>
+    public byte[] ReadStored(RpfEntry e)
+    {
+        if (e.IsDir) throw new InvalidOperationException($"{e.Name} is a directory");
+        var raw = ReadAt(e.Offset, (int)(e.StoredRaw ? e.X8 : e.Size));
+        if (!e.IsEncrypted) return raw;
+        if (_crypto is null)
+            throw new RpfEncryptedException(
+                $"{e.Name} in {Name} is encrypted by the game — it can only be read with the keys " +
+                "from the game's executable.");
+        return _crypto.DecryptEntry(raw, Encryption, e.Name, e.X8);
     }
 
     public byte[] ReadAt(long offset, int count)
@@ -180,10 +214,8 @@ public sealed class RpfArchive : IDisposable
             inflated.CopyTo(outBuf, hdr.Length);
             return outBuf;
         }
-        if (e.TocSize == 0)
-            return ReadAt(e.Offset, (int)e.X8);
-        var comp = ReadAt(e.Offset, (int)e.Size);
-        return Rpf7.Inflate(comp, 0, comp.Length);
+        var stored = ReadStored(e);
+        return e.TocSize == 0 ? stored : Rpf7.Inflate(stored, 0, stored.Length);
     }
 
     /// <summary>Every file entry in TOC order (Python <c>read_rpf</c>, flat).</summary>
@@ -244,6 +276,29 @@ public sealed class RpfArchive : IDisposable
             (first, count) = descend.Value;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Rewrite an encrypted archive's header as OPEN with the decrypted TOC and names —
+    /// what OpenIV / CodeWalker do before editing a copy in the mods folder. Entries the
+    /// game encrypted one by one keep their flag and stay readable by the game.
+    /// </summary>
+    internal void ConvertToOpen()
+    {
+        if (!IsTocEncrypted) return;
+        WriteAt(BaseOffset, Rpf7.Header(Entries.Count, _names.Length));
+        WriteAt(BaseOffset + 16, _toc);
+        WriteAt(BaseOffset + 16 + _toc.Length, _names);
+        Encryption = Rpf7.EncOpen;
+    }
+
+    /// <summary>Current length of the underlying stream.</summary>
+    internal long StreamLength
+    {
+        get
+        {
+            lock (_stream) return _stream.Length;
+        }
     }
 
     internal void WriteAt(long offset, ReadOnlySpan<byte> data)

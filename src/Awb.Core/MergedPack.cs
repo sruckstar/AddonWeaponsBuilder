@@ -318,7 +318,7 @@ public sealed partial class MergedPack
 
     public sealed record PackBuild(string Root, string DlcRpf, List<string> Weapons, string Folder, long Size);
 
-    public PackBuild Build()
+    public PackBuild Build(GameEdition edition = GameEdition.Legacy)
     {
         if (IsEmpty) throw new InvalidOperationException($"'{FolderName}' pack is empty — nothing to build.");
 
@@ -361,7 +361,7 @@ public sealed partial class MergedPack
             }
 
             // one weapons.rpf with every model
-            var writer = new RpfWriter();
+            var writer = new RpfWriter(edition);
             if (Directory.Exists(AssetsDir)) writer.AddFolder(AssetsDir);
             writer.Build(Path.Combine(models, "weapons.rpf"));
             entries.Add(("%PLATFORM%/models/cdimages/weapons.rpf", "RPF_FILE", true));
@@ -378,7 +378,7 @@ public sealed partial class MergedPack
 
             Directory.CreateDirectory(Root);
             var dlcRpf = Path.Combine(Root, "dlc.rpf");
-            var info = RpfPacker.PackFolder(tmp, dlcRpf);
+            var info = RpfPacker.PackFolder(tmp, dlcRpf, edition);
             Dirty = false;
             return new PackBuild(Root, dlcRpf, Data.Weapons.Keys.ToList(), FolderName, info.Size);
         }
@@ -486,15 +486,21 @@ public sealed class MergedPackSet
         return pack;
     }
 
-    /// <summary>Pack every dlcpack that changed (or was never packed).</summary>
-    public List<MergedPack.PackBuild> BuildAll()
+    /// <summary>
+    /// Pack every dlcpack that changed, was never packed, or was last packed for the
+    /// other game edition (the staged models are kept as supplied; conversion to gen9
+    /// happens while packing).
+    /// </summary>
+    public List<MergedPack.PackBuild> BuildAll(GameEdition edition = GameEdition.Legacy)
     {
         var built = new List<MergedPack.PackBuild>();
         foreach (var pack in Packs)
         {
             if (pack.IsEmpty) continue;
-            if (pack.Dirty || !File.Exists(Path.Combine(pack.Root, "dlc.rpf")))
-                built.Add(pack.Build());
+            var rpf = Path.Combine(pack.Root, "dlc.rpf");
+            bool otherEdition = File.Exists(rpf) && RpfRetarget.Mismatched(rpf, edition).Count > 0;
+            if (pack.Dirty || !File.Exists(rpf) || otherEdition)
+                built.Add(pack.Build(edition));
         }
         return built;
     }

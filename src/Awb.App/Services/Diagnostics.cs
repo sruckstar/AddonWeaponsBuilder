@@ -53,7 +53,9 @@ public static class Diagnostics
         sb.AppendLine($"App folder   : {AppPaths.Root}");
         sb.AppendLine($"Data folder  : {AppPaths.AppData}");
         foreach (var rel in new[] { "data/templates/_index.json", "data/weapons.meta", "data/weaponcomponents.meta",
-                                    "data/weaponarchetypes.meta", "data/weaponanimations.meta" })
+                                    "data/weaponarchetypes.meta", "data/weaponanimations.meta",
+                                    "data/plugins/OpenIV.asi", "data/plugins/RageOpenV.asi",
+                                    "ShadersGen9Conversion.xml" })
         {
             var ok = File.Exists(Path.Combine(AppPaths.Root, rel));
             sb.AppendLine($"{rel,-28}: {(ok ? "ok" : "MISSING")}");

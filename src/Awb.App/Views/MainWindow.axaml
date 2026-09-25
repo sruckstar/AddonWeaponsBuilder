@@ -210,10 +210,13 @@
                       </StackPanel>
                     </Button>
                   </Grid>
+                  <TextBlock Classes="hint" Text="{Binding GameEditionHint}" IsVisible="{Binding HasGameEditionHint}" />
                   <TextBlock Classes="hint">
                     <Run Text="Installs into " /><Run Text="mods/update/x64/dlcpacks" FontWeight="SemiBold" />
-                    <Run Text=" and registers the pack in dlclist.xml. Requires a " /><Run Text="mods" FontWeight="SemiBold" />
-                    <Run Text=" folder (OpenIV)." />
+                    <Run Text=" and registers the pack in dlclist.xml. A game without mod support gets it set up: " />
+                    <Run Text="OpenIV.asi" FontWeight="SemiBold" /><Run Text=" (Legacy) or " />
+                    <Run Text="RageOpenV.asi" FontWeight="SemiBold" /><Run Text=" (Enhanced), the " />
+                    <Run Text="mods" FontWeight="SemiBold" /><Run Text=" folder and a copy of update.rpf." />
                   </TextBlock>
                   <CheckBox IsChecked="{Binding MergePack}">
                     <StackPanel Spacing="1">
@@ -221,6 +224,17 @@
                       <TextBlock Classes="desc" Text="Combine all guns into one DLC (otherwise a separate pack per gun). Spills into AddonWeapons2… past 3 GB." />
                     </StackPanel>
                   </CheckBox>
+                </StackPanel>
+
+                <!-- game edition: both read the same RPF, Enhanced needs gen9 models -->
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Classes="desc" Text="Game version" VerticalAlignment="Center" />
+                  <Border Classes="seg" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                      <RadioButton Classes="seg" GroupName="edition" IsChecked="{Binding IsLegacy}" Content="Legacy" />
+                      <RadioButton Classes="seg" GroupName="edition" IsChecked="{Binding IsEnhanced}" Content="Enhanced" />
+                    </StackPanel>
+                  </Border>
                 </StackPanel>
               </StackPanel>
             </Border>

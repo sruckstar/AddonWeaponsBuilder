@@ -33,6 +33,14 @@ public static class AppPaths
     public static string StagingDir => Ensure(Path.Combine(AppData, "staging"));
 
     /// <summary>
+    /// Staging per game edition: Legacy keeps the original folder (packs staged by the
+    /// Python builder carry over); Enhanced gets its own, so a player with both games
+    /// doesn't get one game's weapons pushed into the other.
+    /// </summary>
+    public static string StagingFor(Awb.Core.GameEdition edition) =>
+        edition == Awb.Core.GameEdition.Enhanced ? Ensure(Path.Combine(AppData, "staging-enhanced")) : StagingDir;
+
+    /// <summary>
     /// Scratch space for a dropped source (player flow): unpacked archives plus the flat
     /// input folder the pipeline reads. Only the current drop is kept.
     /// </summary>

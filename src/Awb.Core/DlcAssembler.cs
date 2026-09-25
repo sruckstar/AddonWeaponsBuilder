@@ -191,11 +191,29 @@ public sealed partial class DlcAssembler
         return list;
     }
 
+    /// <summary>
+    /// Copy a model into a loose (unpacked) tree: verbatim when it already suits the
+    /// edition, converted to gen9 when a Legacy model goes into an Enhanced tree.
+    /// </summary>
+    private static void CopyAsset(string src, string dst, GameEdition edition)
+    {
+        if (Rpf7.IsResourceExt(Path.GetExtension(src)))
+        {
+            var raw = File.ReadAllBytes(src);
+            if (ResourceEditions.NeedsConversion(src, raw, edition))
+            {
+                File.WriteAllBytes(dst, ResourceEditions.ForEdition(raw, Path.GetFileName(src), edition));
+                return;
+            }
+        }
+        PathUtil.Copy2(src, dst);
+    }
+
     public static string SlugFolder(string slug) => NonSlugRe().Replace(slug.ToLowerInvariant(), "");
 
     // --------------------------------------------------------------- build
 
-    public BuildResult Build(string outRoot, bool packRpf = true)
+    public BuildResult Build(string outRoot, bool packRpf = true, GameEdition edition = GameEdition.Legacy)
     {
         var slug = SlugFolder(_plan.Slug);
         var root = Path.Combine(outRoot, slug);
@@ -240,7 +258,7 @@ public sealed partial class DlcAssembler
                         copied.Add((src, dst));
                     }
                 }
-                new RpfWriter().AddFolder(staging).Build(Path.Combine(models, "weapons.rpf"));
+                new RpfWriter(edition).AddFolder(staging).Build(Path.Combine(models, "weapons.rpf"));
             }
             finally
             {
@@ -248,7 +266,7 @@ public sealed partial class DlcAssembler
             }
             foreach (var lang in Langs)
                 new RpfWriter().AddBinary("global.gxt2", gxt).Build(Path.Combine(langRoot, $"{lang}dlc.rpf"));
-            rpfInfo = RpfPacker.PackFolder(content, Path.Combine(root, "dlc.rpf"));
+            rpfInfo = RpfPacker.PackFolder(content, Path.Combine(root, "dlc.rpf"), edition);
             PathUtil.TryDeleteDir(content);
             packed = true;
         }
@@ -261,7 +279,7 @@ public sealed partial class DlcAssembler
                 var sp = Path.Combine(_input, src);
                 if (File.Exists(sp))
                 {
-                    PathUtil.Copy2(sp, Path.Combine(rpfDir, dst));
+                    CopyAsset(sp, Path.Combine(rpfDir, dst), edition);
                     copied.Add((src, dst));
                 }
             }
@@ -282,7 +300,7 @@ public sealed partial class DlcAssembler
             ["weapon_hash"] = _plan.WeaponHash,
             ["shop_id"] = _plan.ShopId,
             ["packed"] = packed,
-            ["target"] = "GTA V Legacy (OPEN)",
+            ["target"] = edition.TargetLabel(),
             ["output"] = packed ? $"{slug}/dlc.rpf" : $"{slug}/ (loose)",
             ["asset_renames"] = renamesObj,
             ["install"] = $"Copy the '{slug}' folder (with dlc.rpf inside) to your " +

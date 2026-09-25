@@ -12,7 +12,7 @@ namespace Awb.Cli;
 /// awbctl build-templates [data_dir] [out_dir]
 /// awbctl scan   &lt;templates_dir&gt; &lt;input_folder&gt;
 /// awbctl plan   &lt;templates_dir&gt; &lt;input_folder&gt; [--name N] [--price P] [--shop-id ID]
-/// awbctl build  &lt;templates_dir&gt; &lt;input_folder&gt; &lt;out_dir&gt; [options]
+/// awbctl build  &lt;templates_dir&gt; &lt;input_folder&gt; &lt;out_dir&gt; [options] [--edition legacy|enhanced|auto]
 /// awbctl verify &lt;archive.rpf&gt;
 /// </code>
 /// </summary>
@@ -71,7 +71,9 @@ internal static class Program
                   [--name N] [--desc D] [--price P] [--ammo-cost C] [--shop-id ID]
                   [--comp-price STEM=COST ...] [--model-name NAME]
                   [--no-pack] [--merge-pack] [--install-game-dir DIR]
-                  full Replace -> Add-On build
+                  [--edition legacy|enhanced|auto]
+                  full Replace -> Add-On build; --edition picks the game build the
+                  models are packed for (auto: from the install folder's exe, else legacy)
               verify <archive.rpf>
                   self-check every resource of a built archive
             """);
@@ -227,10 +229,20 @@ internal static class Program
     private static int Build(string[] argv)
     {
         var a = Parse(argv,
-            ["--name", "--desc", "--price", "--ammo-cost", "--shop-id", "--comp-price", "--model-name", "--install-game-dir"],
+            ["--name", "--desc", "--price", "--ammo-cost", "--shop-id", "--comp-price", "--model-name", "--install-game-dir",
+             "--edition"],
             ["--no-pack", "--merge-pack"]);
         NeedPositional(a, 3, 3, "templates_dir, input_folder, out_dir");
         var input = a.Positional[1];
+        GameEdition? edition;
+        try
+        {
+            edition = GameEditions.Parse(a.Opt("--edition"));
+        }
+        catch (ArgumentException ex)
+        {
+            throw new UsageException(ex.Message);
+        }
         var opts = new BuildOptions
         {
             TemplatesDir = a.Positional[0],
@@ -247,6 +259,7 @@ internal static class Program
             PackRpf = !a.Flags.Contains("--no-pack"),
             MergePack = a.Flags.Contains("--merge-pack"),
             InstallGameDir = a.Opt("--install-game-dir"),
+            Edition = edition,
         };
 
         BuildResult? result;
@@ -268,7 +281,7 @@ internal static class Program
                               $"({result.WeaponsInPack.Count} weapon(s) in '{result.Manifest["folder"]}').");
         }
         else if (result.Prebuilt)
-            Console.WriteLine($"\nPrebuilt archive shipped as-is -> {result.Root}");
+            Console.WriteLine($"\nPrebuilt archive shipped -> {result.Root}");
         else if (!result.Packed)
             Console.WriteLine("\nRemaining: pack the loose *.rpf folders via CodeWalker (see manifest.json).");
         else

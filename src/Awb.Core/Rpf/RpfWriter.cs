@@ -6,7 +6,8 @@ namespace Awb.Core.Rpf;
 public sealed record RpfBuildInfo(string Path, int Entries, long Size, int Dirs = 1, int Files = 0);
 
 /// <summary>
-/// Streams an RPF7-OPEN archive to disk. Every file's on-disk blob is produced and
+/// Streams an RPF7-OPEN archive to disk (the container is the same for GTA V Legacy
+/// and Enhanced — only the resources inside differ, see <see cref="ResourceEditions"/>). Every file's on-disk blob is produced and
 /// written one at a time (data region first, header + TOC last), so packing a
 /// multi-gigabyte pack never holds more than one file in memory.
 /// </summary>
@@ -103,12 +104,15 @@ internal sealed class RpfStreamBuilder
 
     // ---- payload producers --------------------------------------------------
 
-    public static Payload ResourceFromFile(string path)
+    public static Payload ResourceFromFile(string path, GameEdition edition) =>
+        Resource(File.ReadAllBytes(path), Path.GetFileName(path), edition);
+
+    /// <summary>A loose RSC7 file (compressed or not) as a resource entry for <paramref name="edition"/>.</summary>
+    public static Payload Resource(byte[] raw, string name, GameEdition edition)
     {
-        var raw = File.ReadAllBytes(path);
-        var (sysf, gfxf) = Rpf7.ReadRsc7Flags(raw, Path.GetFileName(path));
-        var blob = Rpf7.StampBigSize(Rpf7.ResourceBlob(raw, sysf, gfxf));
-        return new Payload { Kind = RpfEntryKind.Resource, Blob = blob, A = sysf, B = gfxf };
+        var blob = ResourceEditions.ForEdition(raw, name, edition);
+        var (sysf, gfxf) = Rpf7.ReadRsc7Flags(blob, name);     // before the big-size stamp scatters bytes 2/5/7/14
+        return new Payload { Kind = RpfEntryKind.Resource, Blob = Rpf7.StampBigSize(blob), A = sysf, B = gfxf };
     }
 
     public static Payload Binary(byte[] data)
@@ -133,15 +137,18 @@ internal sealed class RpfStreamBuilder
 /// header kept verbatim, body compressed exactly once) and binary files (DEFLATE,
 /// real length in FileUncompressedSize).
 /// </summary>
-public sealed class RpfWriter
+public sealed class RpfWriter(GameEdition edition = GameEdition.Legacy)
 {
     private readonly List<(string Name, Func<RpfStreamBuilder.Payload> Produce)> _entries = [];
+
+    /// <summary>The game the resources are packed for (Enhanced converts Legacy models to gen9).</summary>
+    public GameEdition Edition { get; } = edition;
 
     /// <summary>Add an RSC7 resource file (flags are validated now, the blob is built at <see cref="Build"/>).</summary>
     public RpfWriter AddFile(string path)
     {
         Rpf7.ReadRsc7Flags(path);                        // fail early on a non-RSC7 file
-        _entries.Add((Path.GetFileName(path), () => RpfStreamBuilder.ResourceFromFile(path)));
+        _entries.Add((Path.GetFileName(path), () => RpfStreamBuilder.ResourceFromFile(path, Edition)));
         return this;
     }
 
@@ -184,7 +191,7 @@ public static class RpfPacker
     /// (xml/meta/gxt2/json) is DEFLATE-compressed. Directory children are laid out
     /// breadth-first so every directory's children are contiguous and sorted.
     /// </summary>
-    public static RpfBuildInfo PackFolder(string src, string outPath)
+    public static RpfBuildInfo PackFolder(string src, string outPath, GameEdition edition = GameEdition.Legacy)
     {
         var nodes = new List<RpfStreamBuilder.Node>();
         var paths = new List<string>();
@@ -208,7 +215,7 @@ public static class RpfPacker
                     if (Rpf7.IsResourceExt(ext))
                     {
                         Rpf7.ReadRsc7Flags(full);
-                        node.Produce = () => RpfStreamBuilder.ResourceFromFile(full);
+                        node.Produce = () => RpfStreamBuilder.ResourceFromFile(full, edition);
                     }
                     else if (ext == ".rpf")
                         node.Produce = () => RpfStreamBuilder.RawFileStream(full);
@@ -222,6 +229,105 @@ public static class RpfPacker
         long size = RpfStreamBuilder.Write(outPath, nodes);
         int dirs = nodes.Count(n => n.IsDir);
         return new RpfBuildInfo(outPath, nodes.Count - dirs, size, dirs, nodes.Count - dirs);
+    }
+}
+
+/// <summary>
+/// Moves a finished archive between editions: every model resource that doesn't match
+/// the target is converted, everything else (metas, other resources, encryption flags,
+/// TOC order) is carried over byte for byte. Nested .rpf archives are handled recursively.
+/// </summary>
+public static class RpfRetarget
+{
+    /// <summary>RSC7 version from the TOC flags — valid for big resources too, whose archived header is scattered.</summary>
+    private static int FlagsVersion(RpfEntry e) => (int)((((e.X8 >> 28) & 0xF) << 4) | ((e.XC >> 28) & 0xF));
+
+    private static bool Mismatch(RpfEntry e, GameEdition target)
+    {
+        var ext = Path.GetExtension(e.Name);
+        var edition = ResourceEditions.EditionOf(ext, FlagsVersion(e));
+        return edition is not null && edition != target;
+    }
+
+    private static bool IsNestedArchive(RpfEntry e) =>
+        e.StoredRaw && !e.IsEncrypted && e.Name.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Inner paths of the model resources (recursively) built for the other edition.</summary>
+    public static List<string> Mismatched(string rpfPath, GameEdition target)
+    {
+        using var arc = RpfArchive.Open(rpfPath);
+        var found = new List<string>();
+        Walk(arc, "", target, found);
+        return found;
+    }
+
+    private static void Walk(RpfArchive arc, string prefix, GameEdition target, List<string> found)
+    {
+        foreach (var item in arc.Tree())
+        {
+            if (item.IsDir) continue;
+            var e = item.Entry;
+            if (e.IsResource && Mismatch(e, target)) found.Add(prefix + item.Path);
+            else if (IsNestedArchive(e))
+            {
+                using var nested = arc.OpenNested(e);
+                Walk(nested, prefix + item.Path + "/", target, found);
+            }
+        }
+    }
+
+    /// <summary>Rewrite <paramref name="srcRpf"/> for <paramref name="target"/> into <paramref name="outRpf"/>.</summary>
+    public static RpfBuildInfo Convert(string srcRpf, string outRpf, GameEdition target)
+    {
+        using var arc = RpfArchive.Open(srcRpf);
+        var temps = new List<string>();
+        try
+        {
+            long size = Rebuild(arc, outRpf, target, temps);
+            int dirs = arc.Entries.Count(e => e.IsDir);
+            return new RpfBuildInfo(outRpf, arc.Entries.Count - dirs, size, dirs, arc.Entries.Count - dirs);
+        }
+        finally
+        {
+            foreach (var t in temps)
+                try { File.Delete(t); } catch { /* best effort */ }
+        }
+    }
+
+    private static long Rebuild(RpfArchive arc, string outPath, GameEdition target, List<string> temps)
+    {
+        var nodes = arc.Entries.Select(e => new RpfStreamBuilder.Node
+        {
+            Name = e.Name, IsDir = e.IsDir, First = e.FirstChild, Count = e.ChildCount,
+            Produce = e.IsDir ? null : () => Produce(arc, e, target, temps),
+        }).ToList();
+        return RpfStreamBuilder.Write(outPath, nodes);
+    }
+
+    private static RpfStreamBuilder.Payload Produce(RpfArchive arc, RpfEntry e, GameEdition target, List<string> temps)
+    {
+        if (e.IsResource)
+        {
+            if (Mismatch(e, target))
+                return RpfStreamBuilder.Resource(arc.ReadContent(e), e.Name, target);
+            return new RpfStreamBuilder.Payload
+            {
+                Kind = RpfEntryKind.Resource, Blob = arc.ReadAt(e.Offset, (int)e.Size), A = e.X8, B = e.XC,
+            };
+        }
+        if (IsNestedArchive(e))
+        {
+            var tmp = Path.Combine(Path.GetTempPath(), $"awb_{Guid.NewGuid():N}.rpf");
+            temps.Add(tmp);
+            using (var nested = arc.OpenNested(e))
+                Rebuild(nested, tmp, target, temps);
+            return RpfStreamBuilder.RawFileStream(tmp);
+        }
+        var stored = arc.ReadAt(e.Offset, (int)(e.StoredRaw ? e.X8 : e.Size));   // verbatim, flags kept
+        return new RpfStreamBuilder.Payload
+        {
+            Kind = e.StoredRaw ? RpfEntryKind.Raw : RpfEntryKind.Binary, Blob = stored, A = e.X8, B = e.XC,
+        };
     }
 }
 

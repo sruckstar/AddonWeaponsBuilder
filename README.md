@@ -3,8 +3,9 @@
 Превращает **replace-сборку** оружия для GTA V (модели/текстуры, названные под
 существующее оружие) в **add-on DLC-пак**, который детектится нативами
 `GET_NUM_DLC_WEAPONS` / `GET_DLC_WEAPON_DATA` и появляется в меню скрипта
-AddonWeapons — без замены ванильных стволов. Умеет сразу установить пак в игру
-через папку `mods` (OpenIV).
+AddonWeapons — без замены ванильных стволов. Работает с **GTA V Legacy и GTA V
+Enhanced** и умеет сразу установить пак в игру через папку `mods` — в том числе в
+«чистую» игру без OpenIV (см. «Legacy и Enhanced»).
 
 Это порт оригинального Python-проекта (`D:\awb`) на **.NET 10 + Avalonia 12 +
 SkiaSharp**. Ядро перенесено 1:1 и сверено с оригиналом (см. «Проверка»),
@@ -24,10 +25,13 @@ src/
     MetaGenerator.cs         9 meta-файлов + сопоставление компонентов ← metagen.py
     Overrides.cs             свои meta модера / готовый dlc.rpf       ← overrides.py
     Gxt2.cs                  компилятор/ридер .gxt2                    ← gxt.py
-    Rpf/                     RPF7-OPEN writer/reader/verify/patch       ← rpf.py
+    Rpf/                     RPF7 writer/reader/verify/patch            ← rpf.py
+      ResourceEditions.cs    Legacy → Enhanced (gen9) конвертация моделей через CodeWalker (новое)
+      GameCrypto.cs          NG/AES-ключи из GTA5.exe / GTA5_Enhanced.exe для игровых архивов (новое)
+    GameEdition.cs           Legacy / Enhanced: определение по exe (новое)
     DlcAssembler.cs          дерево dlcpack → dlc.rpf                   ← assembler.py
     MergedPack.cs            общий пак AddonWeapons[N], лимит 3 ГБ      ← merge.py
-    GameInstaller.cs         установка в mods + dlclist.xml             ← installer.py
+    GameInstaller.cs         подготовка игры (плагин, mods, update.rpf) + установка + dlclist.xml ← installer.py
     ShopIds.cs               подбор свободного Shop ID                  ← shopid.py
     Pipeline.cs              оркестрация сборки (3 маршрута)            ← pipeline.py
     SourceIntake.cs          drop игрока: папка / zip / rar / 7z → плоская входная папка (новое)
@@ -38,6 +42,8 @@ src/
     ViewModels/              MVVM (CommunityToolkit.Mvvm)
     Services/                лог, диагностика (--diagnose), настройки
 data/                        ванильные meta + templates/ (133 ствола)
+  plugins/                   OpenIV.asi (Legacy), RageOpenV.asi (Enhanced) — ставятся в «чистую» игру
+external/CodeWalker/         git submodule (dexyfex/CodeWalker) — используется только CodeWalker.Core
 tests/Awb.Tests/             xUnit-тесты ядра и ViewModel
 tools/parity/                сверка с Python-оригиналом
 tools/Awb.UiSnapshot/        офскрин-рендер окна в PNG (Avalonia.Headless)
@@ -47,7 +53,8 @@ build.ps1                    тесты + self-contained публикация (+
 
 ## Сборка и запуск
 
-Нужен .NET SDK 10.
+Нужен .NET SDK 10. CodeWalker подключён сабмодулем — клонировать с `--recursive`
+(или после клона: `git submodule update --init`).
 
 ```powershell
 dotnet run --project src/Awb.App          # GUI
@@ -86,9 +93,49 @@ awbctl plan  data/templates <input_folder> --name "My Weapon"
 awbctl build data/templates <input_folder> <out_dir> \
     --name "Vintage Pistol" --desc "A refined classic sidearm." \
     --price 45000 --ammo-cost 120 --comp-price w_pi_x_mag1=800 \
-    [--model-name w_pi_mygun] [--no-pack] [--merge-pack] [--install-game-dir "D:\GTA V"]
+    [--model-name w_pi_mygun] [--no-pack] [--merge-pack] [--install-game-dir "D:\GTA V"] \
+    [--edition legacy|enhanced|auto]   # auto: по exe в --install-game-dir, иначе legacy
 awbctl verify <archive.rpf>        # самопроверка ресурсов готового архива (новое)
 ```
+
+## Legacy и Enhanced
+
+Контейнер RPF7 у обеих версий один и тот же: моды в папке `mods` — OPEN-архивы (CodeWalker
+для Gen9 пробовал `NONE` и вернулся к `OPEN`). Различаются **ресурсы внутри**: у Enhanced
+(gen9) свои версии и раскладка блоков — `.ydr/.ydd` v159 вместо 165, `.ytd` v5 вместо 13,
+`.yft` v171 вместо 162.
+
+* **Выбор версии.** В режиме игрока — автоматически по exe в папке игры (`GTA5.exe` →
+  Legacy, `GTA5_Enhanced.exe` → Enhanced), переключатель «Game version» можно поправить
+  вручную. В режиме моддера — переключатель (запоминается). CLI — `--edition`.
+* **Конвертация моделей.** Для Enhanced Legacy-модели конвертируются в gen9 при упаковке
+  (CodeWalker.Core, тот же код, что в CodeWalker Gen9 Converter), результат проверяется:
+  версия gen9 и страницы ровно по флагам. Уже gen9-модели не трогаются. Работает во всех
+  маршрутах: генерация, свои meta, loose-папки, общий пак, готовый `dlc.rpf` (перепаковывается,
+  всё кроме моделей — байт в байт). Обратной конвертации нет: gen9-модель в Legacy-пак —
+  понятная ошибка.
+* **Общий пак** хранится отдельно для каждой версии (`staging` — Legacy, как раньше,
+  `staging-enhanced` — Enhanced); исходные модели в staging не конвертируются.
+
+### «Чистая» игра
+
+Если в папке игры нет ни одного из `OpenIV.asi`, `DSOUND.dll`, `OpenRPF.asi`,
+`RageOpenV.asi`, при установке:
+
+1. копируется плагин из `data/plugins`: `OpenIV.asi` для Legacy, `RageOpenV.asi` для Enhanced;
+   если нет ASI-лоадера (`dinput8.dll`, `xinput1_4.dll`, …) — предупреждение в логе
+   (для Legacy нужен `dinput8.dll`, для Enhanced — `xinput1_4.dll`: ScriptHookV или Ultimate ASI Loader);
+2. создаётся папка `mods`;
+3. `update\update.rpf` копируется в `mods\update\update.rpf` (2–3 ГБ, только первый раз,
+   с проверкой свободного места);
+4. при первой правке `dlclist.xml` скопированный архив переводится из игрового NG-шифрования
+   в OPEN — как это делают OpenIV/CodeWalker: TOC расшифровывается ключами, найденными в
+   `GTA5.exe` / `GTA5_Enhanced.exe` (по SHA1, как в CodeWalker; ключей в программе нет),
+   остальные записи остаются как есть. Если новый `dlclist.xml` не влезает в свои секторы,
+   запись переносится в конец архива.
+
+Если `mods\update\update.rpf` — распакованная папка без `dlclist.xml`, он берётся из
+игрового `update.rpf`.
 
 ## Источник в режиме игрока (drop-зона)
 
@@ -176,9 +223,11 @@ awbctl verify <archive.rpf>        # самопроверка ресурсов �
 * `AddonWeaponsBuilder.exe --diagnose` — отчёт о системе и целостности `data/`.
 * Любой сбой старта показывает MessageBox и пишется в лог.
 
-## Известные ограничения (унаследованы)
+## Известные ограничения
 
-* Поддерживаются только незашифрованные RPF7 (OPEN — GTA V Legacy / OpenIV).
+* Собираемые архивы — OPEN; зашифрованные игрой (NG/AES) архивы читаются только при
+  установке (нужен exe игры в той же папке).
+* Конвертация Enhanced → Legacy невозможна (её нет и в CodeWalker).
 * Библиотека шаблонов — ванильные стволы; для DLC-оружия без точного шаблона
   используется структурный шаблон класса.
 * Финальную загрузку пака стоит проверить в игре.

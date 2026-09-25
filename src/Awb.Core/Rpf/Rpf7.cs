@@ -4,7 +4,10 @@ using System.IO.Compression;
 namespace Awb.Core.Rpf;
 
 /// <summary>A file is not a readable RPF7-OPEN archive (wrong magic, encrypted TOC…).</summary>
-public sealed class RpfFormatException(string message) : IOException(message);
+public class RpfFormatException(string message) : IOException(message);
+
+/// <summary>The archive (or one of its entries) is encrypted by the game and no keys were supplied.</summary>
+public sealed class RpfEncryptedException(string message) : RpfFormatException(message);
 
 /// <summary>How a file entry is stored in an RPF7 archive.</summary>
 public enum RpfEntryKind

@@ -10,6 +10,8 @@ public sealed class Settings
     public string Mode { get; set; } = "modder";
     public string? LastOutput { get; set; }
     public string? LastGame { get; set; }
+    /// <summary>Game build the modder flow packs for: "legacy" / "enhanced".</summary>
+    public string Edition { get; set; } = "legacy";
 
     /// <summary>Where <see cref="Save"/> writes; null (a fresh instance) = in-memory only.</summary>
     [JsonIgnore] public string? FilePath { get; private set; }

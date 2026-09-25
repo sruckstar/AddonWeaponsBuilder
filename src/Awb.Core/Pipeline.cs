@@ -26,6 +26,13 @@ public sealed class BuildOptions
     public bool MergePack { get; init; }
     /// <summary>GTA V folder to install the finished pack into (mods/…).</summary>
     public string? InstallGameDir { get; init; }
+    /// <summary>
+    /// Game build to pack for. Null: taken from <see cref="InstallGameDir"/>'s executable,
+    /// or Legacy when not installing.
+    /// </summary>
+    public GameEdition? Edition { get; init; }
+    /// <summary>Bundled mods-folder plugins (OpenIV.asi / RageOpenV.asi). Null = DataDir/plugins.</summary>
+    public string? PluginsDir { get; init; }
 }
 
 /// <summary>
@@ -89,12 +96,22 @@ public static partial class Pipeline
         log("Self-check passed: all resources decompress to exactly their flagged page size — ready to install.");
     }
 
+    /// <summary>The log line naming what a build targets.</summary>
+    public static string TargetLine(GameEdition edition) => edition == GameEdition.Enhanced
+        ? "Target: GTA V Enhanced (OPEN archive, models in gen9 format)."
+        : "Target: GTA V Legacy (OPEN archive).";
+
     /// <summary>Full build. Returns null when the base weapon can't be determined.</summary>
     public static BuildResult? BuildAddon(BuildOptions o, Action<string> log)
     {
         if (o.InstallGameDir is not null && !o.PackRpf && !o.MergePack)
             throw new ArgumentException("Installing into GTA V requires a packed dlc.rpf — enable RPF packing.");
-        log("Target: GTA V Legacy (OPEN archive).");
+        var edition = o.InstallGameDir is not null
+            ? GameInstaller.ResolveEdition(o.InstallGameDir, o.Edition, log)
+            : o.Edition ?? GameEdition.Legacy;
+        log(TargetLine(edition));
+        if (o.InstallGameDir is not null)
+            GameInstaller.PrepareGame(o.InstallGameDir, edition, o.PluginsDir ?? Path.Combine(o.DataDir, "plugins"), log);
         bool packRpf = o.PackRpf || o.MergePack;          // the shared pack is always packed
 
         // ---- route 3: the folder already holds a finished pack
@@ -102,7 +119,7 @@ public static partial class Pipeline
         if (prebuilt is not null)
         {
             log($"Input folder holds a prebuilt archive: {Path.GetFileName(prebuilt)} — no weapon models to convert.");
-            return BuildPrebuilt(prebuilt, o, log);
+            return BuildPrebuilt(prebuilt, o, edition, log);
         }
 
         if (!EnsureTemplates(o.DataDir, o.TemplatesDir, log)) return null;
@@ -190,11 +207,12 @@ public static partial class Pipeline
             if (src.Configs.Count > 0)
                 log("    [!] content.xml / setup2.xml are regenerated for the shared pack (it has one " +
                     "changeset for all weapons) — the supplied ones are not used.");
-            return BuildMerged(res, plan, metas, mg, o, log);
+            return BuildMerged(res, plan, metas, mg, o, edition, log);
         }
 
         var asm = new DlcAssembler(res, plan, metas, mg.GxtLabels(), o.InputFolder, src);
-        var result = asm.Build(o.OutDir, packRpf);
+        if (edition == GameEdition.Enhanced) LogGen9Conversion(o.InputFolder, asm.AssetRenames(), log);
+        var result = asm.Build(o.OutDir, packRpf, edition);
         log($"WEAPON hash: {plan.WeaponHash}");
         log($"Assets copied: {result.Assets.Count}");
         if (result.Packed)
@@ -220,6 +238,23 @@ public static partial class Pipeline
     /// <summary>Python's str() of an optional value, for log parity.</summary>
     private static string Py(string? s) => s ?? "None";
 
+    /// <summary>Tell the user which of the weapon's models get converted for Enhanced.</summary>
+    private static void LogGen9Conversion(string inputFolder, List<(string Src, string Dst)> renames, Action<string> log)
+    {
+        var legacy = new List<string>();
+        foreach (var (src, _) in renames)
+        {
+            var path = Path.Combine(inputFolder, src);
+            if (!File.Exists(path) || !Rpf7.IsResourceExt(Path.GetExtension(path))) continue;
+            Span<byte> hdr = stackalloc byte[16];
+            using (var fs = File.OpenRead(path))
+                if (fs.ReadAtLeast(hdr, 16, throwOnEndOfStream: false) < 16) continue;
+            if (ResourceEditions.NeedsConversion(path, hdr, GameEdition.Enhanced)) legacy.Add(Path.GetFileName(src));
+        }
+        if (legacy.Count > 0)
+            log($"Converting {legacy.Count} Legacy model(s) to the Enhanced (gen9) format: {string.Join(", ", legacy)}");
+    }
+
     // ------------------------------------------------------------ merged pack
 
     private static MergedPackSet OpenPackSet(string outDir, string? installGameDir, Action<string> log)
@@ -230,9 +265,10 @@ public static partial class Pipeline
     }
 
     /// <summary>Pack every changed dlcpack, self-check it, optionally install the family.</summary>
-    private static BuildResult FinishMerged(MergedPackSet ms, string? installGameDir, Action<string> log)
+    private static BuildResult FinishMerged(MergedPackSet ms, string? installGameDir, GameEdition edition,
+                                            Action<string> log)
     {
-        var built = ms.BuildAll();
+        var built = ms.BuildAll(edition);
         foreach (var b in built)
         {
             log($"Packed '{b.Folder}' into a single dlc.rpf ({b.Size} bytes, {b.Weapons.Count} weapon(s)).");
@@ -282,13 +318,15 @@ public static partial class Pipeline
     }
 
     private static BuildResult BuildMerged(ScanResult res, NamePlan plan, Dictionary<string, string> metas,
-                                           MetaGenerator mg, BuildOptions o, Action<string> log)
+                                           MetaGenerator mg, BuildOptions o, GameEdition edition, Action<string> log)
     {
         var ms = OpenPackSet(o.OutDir, o.InstallGameDir, log);
         var asm = new DlcAssembler(res, plan, metas, mg.GxtLabels(), o.InputFolder);
-        ms.AddWeapon(plan.Suffix, mg.WeaponName, metas, mg.GxtLabels(), o.InputFolder, asm.AssetRenames());
+        var renames = asm.AssetRenames();
+        ms.AddWeapon(plan.Suffix, mg.WeaponName, metas, mg.GxtLabels(), o.InputFolder, renames);
         log($"WEAPON hash: {plan.WeaponHash}");
-        return FinishMerged(ms, o.InstallGameDir, log);
+        if (edition == GameEdition.Enhanced) LogGen9Conversion(o.InputFolder, renames, log);
+        return FinishMerged(ms, o.InstallGameDir, edition, log);
     }
 
     // ------------------------------------------------------------ prebuilt dlc.rpf
@@ -297,7 +335,7 @@ public static partial class Pipeline
     /// Standalone: the archive is taken as-is (installed, or copied to the output folder).
     /// Merged: it is unpacked and folded into the shared pack.
     /// </summary>
-    private static BuildResult BuildPrebuilt(string dlcRpf, BuildOptions o, Action<string> log)
+    private static BuildResult BuildPrebuilt(string dlcRpf, BuildOptions o, GameEdition edition, Action<string> log)
     {
         var folderName = Path.GetFileName(Path.TrimEndingDirectorySeparator(o.InputFolder));
         if (o.MergePack)
@@ -315,16 +353,54 @@ public static partial class Pipeline
             var packName = string.IsNullOrEmpty(folderName) ? o.Name : folderName;
             var suffix = new Namer(packName).Suffix;
             ms.AddPrebuilt(suffix, packName, imported);
-            return FinishMerged(ms, o.InstallGameDir, log);
+            return FinishMerged(ms, o.InstallGameDir, edition, log);
         }
 
         var dlcName = DlcFolderName(folderName);
         if (dlcName.Length == 0) dlcName = DlcFolderName(o.Name);
-        log($"Installing the archive as-is under the dlcpack name '{dlcName}'.");
 
+        // the container fits both editions, the models inside may not
+        var mismatched = RpfRetarget.Mismatched(dlcRpf, edition);
+        var source = dlcRpf;
+        string? tmpDir = null;
+        if (mismatched.Count > 0)
+        {
+            if (edition == GameEdition.Legacy)
+                throw new InvalidOperationException(
+                    $"{Path.GetFileName(dlcRpf)} is built for GTA V Enhanced — its models are in the gen9 format " +
+                    $"({string.Join(", ", mismatched.Take(3))}{(mismatched.Count > 3 ? ", …" : "")}), which " +
+                    "GTA V Legacy can't load. Use the Legacy version of the mod.");
+            log($"The archive holds {mismatched.Count} Legacy model(s) — converting them to the Enhanced (gen9) " +
+                $"format; everything else is kept byte for byte.");
+            tmpDir = PathUtil.MakeTempDir();
+            var converted = Path.Combine(tmpDir, "dlc.rpf");
+            RpfRetarget.Convert(dlcRpf, converted, edition);
+            VerifyPack(converted, log);
+            dlcRpf = converted;
+            log($"Installing the converted archive under the dlcpack name '{dlcName}'.");
+        }
+        else
+        {
+            log($"Installing the archive as-is under the dlcpack name '{dlcName}'.");
+        }
+
+        try
+        {
+            return ShipPrebuilt(dlcRpf, source, dlcName, o, edition, converted: tmpDir is not null, log);
+        }
+        finally
+        {
+            if (tmpDir is not null) PathUtil.TryDeleteDir(tmpDir);
+        }
+    }
+
+    private static BuildResult ShipPrebuilt(string dlcRpf, string source, string dlcName, BuildOptions o, GameEdition edition,
+                                            bool converted, Action<string> log)
+    {
         if (o.InstallGameDir is not null)
         {
-            GameInstaller.InstallToGame(o.InstallGameDir, dlcRpf, dlcName, log);
+            var installed = GameInstaller.InstallToGame(o.InstallGameDir, dlcRpf, dlcName, log);
+            if (converted) dlcRpf = installed;                  // the temp copy is about to go
             return new BuildResult
             {
                 Root = Path.GetDirectoryName(dlcRpf)!, DlcRpf = dlcRpf, Packed = true, Prebuilt = true,
@@ -339,9 +415,9 @@ public static partial class Pipeline
             PathUtil.Copy2(dlcRpf, dest);
         var manifest = new JsonObject
         {
-            ["packed"] = true, ["prebuilt"] = true, ["target"] = "GTA V Legacy (OPEN)",
+            ["packed"] = true, ["prebuilt"] = true, ["target"] = edition.TargetLabel(),
             ["output"] = $"{dlcName}/dlc.rpf",
-            ["source"] = dlcRpf,
+            ["source"] = source,
             ["install"] = $"Copy the '{dlcName}' folder (with dlc.rpf inside) to your " +
                           $"dlcpacks path and add 'dlcpacks:/{dlcName}/' to dlclist.xml.",
         };

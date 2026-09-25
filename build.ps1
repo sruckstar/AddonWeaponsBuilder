@@ -21,6 +21,12 @@ $out = Join-Path $PSScriptRoot "publish\AddonWeaponsBuilder"
 [xml]$props = Get-Content (Join-Path $PSScriptRoot "Directory.Build.props")
 $version = $props.Project.PropertyGroup.Version
 
+# CodeWalker.Core (gen9 conversion, game archive keys) comes in as a git submodule
+if (-not (Test-Path external\CodeWalker\CodeWalker.Core\CodeWalker.Core.csproj)) {
+    git submodule update --init --recursive
+    if ($LASTEXITCODE -ne 0) { throw "could not fetch the CodeWalker submodule" }
+}
+
 # tests\ is developer-only and not in the repository — skip when absent
 if (-not $SkipTests -and (Test-Path tests\Awb.Tests)) {
     dotnet test tests\Awb.Tests -c Release

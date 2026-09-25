@@ -7,21 +7,164 @@ namespace Awb.Core;
 
 /// <summary>
 /// Installs a finished dlc.rpf into the GTA V game folder, mirroring a manual Add-On
-/// install through the OpenIV mods folder:
+/// install through the mods folder:
 /// <code>
-/// &lt;game&gt;/mods/                                   must exist
+/// &lt;game&gt;/OpenIV.asi | RageOpenV.asi | …           a mods-folder plugin (installed if none is there)
+/// &lt;game&gt;/mods/                                   created if missing
+/// &lt;game&gt;/mods/update/update.rpf                     copied from the game on first install
 /// &lt;game&gt;/mods/update/update.rpf/common/data/dlclist.xml   gets &lt;Item&gt;dlcpacks:/&lt;DLC&gt;/&lt;/Item&gt;
 /// &lt;game&gt;/mods/update/x64/dlcpacks/&lt;DLC&gt;/dlc.rpf    the build is copied here
 /// </code>
 /// update.rpf may be an unpacked folder (the file is edited on disk) or a real RPF7
-/// archive (dlclist.xml is rewritten in place inside it).
+/// archive (dlclist.xml is rewritten in place inside it). A fresh copy of the game's
+/// update.rpf is still encrypted by the game: it is switched to OPEN on the first edit,
+/// with the keys read from the game executable — the same thing OpenIV/CodeWalker do.
 /// </summary>
 public static partial class GameInstaller
 {
     public const string DlclistInner = "common/data/dlclist.xml";
 
+    /// <summary>Plugins that give the game a mods folder — any one of them is enough.</summary>
+    public static readonly string[] ModFolderPlugins = ["OpenIV.asi", "DSOUND.dll", "OpenRPF.asi", "RageOpenV.asi"];
+
+    /// <summary>Proxy DLLs that load *.asi plugins (ScriptHookV / Ultimate ASI Loader names).</summary>
+    public static readonly string[] AsiLoaders =
+        ["dinput8.dll", "xinput1_4.dll", "dsound.dll", "version.dll", "winmm.dll", "winhttp.dll", "d3d11.dll"];
+
+    /// <summary>The plugin shipped in data/plugins for an edition.</summary>
+    public static string BundledPlugin(GameEdition e) => e == GameEdition.Enhanced ? "RageOpenV.asi" : "OpenIV.asi";
+
+    /// <summary>The ASI loader to recommend for an edition (RageOpenV readme).</summary>
+    public static string RecommendedAsiLoader(GameEdition e) => e == GameEdition.Enhanced ? "xinput1_4.dll" : "dinput8.dll";
+
     [GeneratedRegex(@"([ \t]*)</Paths>")] private static partial Regex PathsCloseRe();
     [GeneratedRegex(@"\n([ \t]*)<Item>")] private static partial Regex ItemIndentRe();
+
+    // ================================================================ game preparation
+
+    /// <summary>
+    /// The edition to build for when installing into <paramref name="gameDir"/>: the
+    /// requested one (with a warning if the folder runs the other), else the one its
+    /// executable names. A folder with no executable (a bare mods tree) counts as Legacy.
+    /// </summary>
+    /// <param name="requested">forced edition, or null to take it from the executable</param>
+    public static GameEdition ResolveEdition(string gameDir, GameEdition? requested, Action<string> log)
+    {
+        if (!Directory.Exists(gameDir))
+            throw new DirectoryNotFoundException($"Game folder not found: {gameDir}");
+
+        var detected = GameEditions.Detect(gameDir);
+        GameEdition edition;
+        if (requested is { } r)
+        {
+            edition = r;
+            if (detected is { } d && d != r)
+                log($"    [!] The game folder runs {d.DisplayName()} ({d.ExeName()}), but the pack is " +
+                    $"built for {r.DisplayName()} — the game won't load it correctly.");
+        }
+        else if (detected is { } d)
+            edition = d;
+        else if (GameEditions.IsAmbiguous(gameDir))
+            throw new InvalidOperationException(
+                $"The game folder holds both {GameEditions.LegacyExe} and {GameEditions.EnhancedExe} — " +
+                "choose the game version (Legacy / Enhanced) explicitly.");
+        else
+            edition = GameEdition.Legacy;               // not a recognisable install (e.g. a bare mods tree)
+        return edition;
+    }
+
+    /// <summary>
+    /// Make the game able to take add-on packs: a mods-folder plugin (the bundled
+    /// OpenIV.asi / RageOpenV.asi when the game has none), the mods folder, and
+    /// mods/update/update.rpf copied from the game. Idempotent.
+    /// </summary>
+    /// <param name="pluginsDir">folder with the bundled plugins (data/plugins)</param>
+    public static void PrepareGame(string gameDir, GameEdition edition, string pluginsDir, Action<string> log)
+    {
+        // only touch real game installs: a folder without the executable gets no plugin
+        if (GameEditions.Detect(gameDir) is not null || GameEditions.IsAmbiguous(gameDir))
+            EnsureModFolderPlugin(gameDir, edition, pluginsDir, log);
+        EnsureModsFolder(gameDir, log);
+        EnsureUpdateRpf(gameDir, log);
+    }
+
+    /// <summary>Install the bundled mods-folder plugin when the game has none of <see cref="ModFolderPlugins"/>.</summary>
+    public static void EnsureModFolderPlugin(string gameDir, GameEdition edition, string pluginsDir, Action<string> log)
+    {
+        var present = ModFolderPlugins.Where(p => File.Exists(Path.Combine(gameDir, p))).ToList();
+        if (present.Count == 0)
+        {
+            var plugin = BundledPlugin(edition);
+            var src = Path.Combine(pluginsDir, plugin);
+            if (!File.Exists(src))
+                throw new FileNotFoundException(
+                    $"The game has no mods-folder plugin ({string.Join(", ", ModFolderPlugins)}) and the " +
+                    $"bundled {plugin} is missing: {src}. Reinstall AddonWeapons Builder.");
+            PathUtil.Copy2(src, Path.Combine(gameDir, plugin));
+            log($"    Installed {plugin} into the game folder — it lets {edition.DisplayName()} load the mods folder.");
+            present.Add(plugin);
+        }
+
+        // an .asi does nothing on its own: something has to load it
+        bool selfLoading = present.Any(p => p.EndsWith(".dll", StringComparison.OrdinalIgnoreCase));
+        if (!selfLoading && !AsiLoaders.Any(l => File.Exists(Path.Combine(gameDir, l))))
+            log($"    [!] No ASI loader in the game folder — {string.Join(" / ", present)} will not be loaded " +
+                $"and the game will ignore the mods folder. Install ScriptHookV or Ultimate ASI Loader " +
+                $"({RecommendedAsiLoader(edition)} for {edition.DisplayName()}).");
+    }
+
+    public static void EnsureModsFolder(string gameDir, Action<string> log)
+    {
+        var mods = Path.Combine(gameDir, "mods");
+        if (Directory.Exists(mods)) return;
+        Directory.CreateDirectory(mods);
+        log($"    Created the mods folder: {mods}");
+    }
+
+    /// <summary>Copy the game's update\update.rpf into mods (first install only).</summary>
+    public static void EnsureUpdateRpf(string gameDir, Action<string> log)
+    {
+        var modsUpd = Path.Combine(gameDir, "mods", "update", "update.rpf");
+        if (File.Exists(modsUpd) || Directory.Exists(modsUpd)) return;
+
+        var gameUpd = Path.Combine(gameDir, "update", "update.rpf");
+        if (!File.Exists(gameUpd))
+            throw new FileNotFoundException(
+                $"update.rpf not found: neither in mods ({modsUpd}) nor in the game ({gameUpd}).\n" +
+                "Check that the selected folder is the GTA V game folder.");
+
+        long size = new FileInfo(gameUpd).Length;
+        var root = Path.GetPathRoot(Path.GetFullPath(modsUpd));
+        if (!string.IsNullOrEmpty(root))
+        {
+            try
+            {
+                long free = new DriveInfo(root).AvailableFreeSpace;
+                if (free < size + (256L << 20))
+                    throw new IOException(
+                        $"Not enough disk space to copy update.rpf into mods: it needs {MergedPack.FmtSize(size)}, " +
+                        $"{MergedPack.FmtSize(free)} free on {root}.");
+            }
+            catch (ArgumentException) { /* not a local drive — just try */ }
+        }
+
+        log($"    Copying update\\update.rpf into mods ({MergedPack.FmtSize(size)}) — first install only, this takes a while…");
+        Directory.CreateDirectory(Path.GetDirectoryName(modsUpd)!);
+        var tmp = modsUpd + ".tmp";
+        try
+        {
+            File.Copy(gameUpd, tmp, overwrite: true);
+            File.Move(tmp, modsUpd);
+        }
+        catch
+        {
+            try { File.Delete(tmp); } catch { /* best effort */ }
+            throw;
+        }
+        log($"    update.rpf copied -> {modsUpd}");
+    }
+
+    // ================================================================ dlclist.xml
 
     /// <summary>dlclist.xml text with the pack entry added, or null if already listed.</summary>
     public static string? DlclistWithEntry(string text, string dlcName, Action<string> log)
@@ -55,16 +198,44 @@ public static partial class GameInstaller
         if (updated is not null) TextIo.WriteText(dlclist, updated);
     }
 
-    private static void AddToDlclistRpf(string updateRpf, string dlcName, Action<string> log)
+    /// <summary>Run <paramref name="op"/> without keys first; load them from the game only when the archive needs them.</summary>
+    private static T WithKeys<T>(string gameDir, Action<string> log, ref GameCrypto? crypto, Func<GameCrypto?, T> op)
     {
-        var raw = RpfTools.ReadInnerFile(updateRpf, DlclistInner);
+        try
+        {
+            return op(crypto);
+        }
+        catch (RpfEncryptedException) when (crypto is null)
+        {
+            crypto = GameCrypto.ForGame(gameDir, log);
+            return op(crypto);
+        }
+    }
+
+    private static void AddToDlclistRpf(string gameDir, string updateRpf, string dlcName, Action<string> log)
+    {
+        GameCrypto? crypto = null;
+        var raw = WithKeys(gameDir, log, ref crypto, c => RpfTools.ReadInnerFile(updateRpf, DlclistInner, c));
         var text = TextIo.DecodeUtf8Sig(raw);
         var updated = DlclistWithEntry(text, dlcName, log);
-        if (updated is not null)
-        {
-            var info = RpfTools.PatchInnerFile(updateRpf, DlclistInner, Encoding.UTF8.GetBytes(updated));
-            log($"    dlclist.xml rewritten in update.rpf ({info.Uncompressed} bytes, {info.OnDisk} compressed).");
-        }
+        if (updated is null) return;
+
+        var info = RpfTools.PatchInnerFile(updateRpf, DlclistInner, Encoding.UTF8.GetBytes(updated), crypto);
+        if (info.Opened)
+            log("    update.rpf switched from the game's encryption to OPEN (as OpenIV does on the first edit).");
+        log($"    dlclist.xml rewritten in update.rpf ({info.Uncompressed} bytes, {info.OnDisk} compressed" +
+            (info.Moved ? ", moved to the end of the archive" : "") + ").");
+    }
+
+    /// <summary>The game's own dlclist.xml, read out of its encrypted update\update.rpf.</summary>
+    private static string GameDlclist(string gameDir, Action<string> log)
+    {
+        var gameUpd = Path.Combine(gameDir, "update", "update.rpf");
+        if (!File.Exists(gameUpd))
+            throw new FileNotFoundException($"update.rpf not found in the game: {gameUpd}");
+        GameCrypto? crypto = null;
+        var raw = WithKeys(gameDir, log, ref crypto, c => RpfTools.ReadInnerFile(gameUpd, DlclistInner, c));
+        return TextIo.DecodeUtf8Sig(raw);
     }
 
     /// <summary>
@@ -78,22 +249,31 @@ public static partial class GameInstaller
         if (!Directory.Exists(mods))
             throw new FileNotFoundException(
                 $"'mods' folder not found in the game folder: {mods}\n" +
-                "Add-On installation is only supported via the OpenIV mods folder.");
+                "Add-On installation is only supported via the mods folder.");
 
         var updateRpf = Path.Combine(mods, "update", "update.rpf");
         if (Directory.Exists(updateRpf))
         {
             var dlclist = Path.Combine(updateRpf, "common", "data", "dlclist.xml");
             if (!File.Exists(dlclist))
-                throw new FileNotFoundException(
-                    $"dlclist.xml file not found: {dlclist}\n" +
-                    "Check that update.rpf was unpacked into mods via OpenIV.");
+            {
+                // a loose-file update.rpf (override folder) without its own dlclist.xml:
+                // start it from the game's copy
+                if (!File.Exists(Path.Combine(gameDir, "update", "update.rpf")))
+                    throw new FileNotFoundException(
+                        $"dlclist.xml file not found: {dlclist}\n" +
+                        "Check that update.rpf was unpacked into mods via OpenIV.");
+                var text = GameDlclist(gameDir, log);
+                Directory.CreateDirectory(Path.GetDirectoryName(dlclist)!);
+                TextIo.WriteText(dlclist, text);
+                log($"    dlclist.xml taken from the game's update.rpf -> {dlclist}");
+            }
             AddToDlclistFile(dlclist, dlcName, log);
         }
         else if (File.Exists(updateRpf))
         {
             log($"    update.rpf is an archive, editing dlclist.xml inside: {updateRpf}");
-            AddToDlclistRpf(updateRpf, dlcName, log);
+            AddToDlclistRpf(gameDir, updateRpf, dlcName, log);
         }
         else
         {

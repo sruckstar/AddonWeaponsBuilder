@@ -65,6 +65,7 @@ public sealed partial class MainViewModel : ObservableObject
         _settings = settings;
         IsPlayer = settings.Mode == "player";
         OutputFolder = settings.LastOutput ?? "";
+        IsEnhanced = settings.Edition == "enhanced";
         GameFolder = settings.LastGame ?? "";
         IsDark = settings.Theme != "light";
     }
@@ -86,6 +87,8 @@ public sealed partial class MainViewModel : ObservableObject
     {
         _settings.Mode = value ? "player" : "modder";
         _settings.Save();
+        if (value) DetectGameEdition(GameFolder);
+        else IsEnhanced = _settings.Edition == "enhanced";
         // each mode has its own source: the modder's folder path / the player's drop
         _ = AnalyzeSourceAsync(ActiveInput);
     }
@@ -398,6 +401,53 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] public partial bool PackRpf { get; set; } = true;
     [ObservableProperty] public partial bool MergePack { get; set; } = true;
 
+    /// <summary>Pack for GTA V Enhanced (gen9 models) instead of Legacy.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLegacy))]
+    public partial bool IsEnhanced { get; set; }
+
+    public bool IsLegacy
+    {
+        get => !IsEnhanced;
+        set => IsEnhanced = !value;
+    }
+
+    public GameEdition Edition => IsEnhanced ? GameEdition.Enhanced : GameEdition.Legacy;
+
+    /// <summary>What the selected game folder turned out to be (player flow).</summary>
+    [ObservableProperty] public partial string GameEditionHint { get; set; } = "";
+    [ObservableProperty] public partial bool HasGameEditionHint { get; set; }
+
+    partial void OnIsEnhancedChanged(bool value)
+    {
+        if (IsPlayer) return;                            // the player's choice follows the game folder
+        var stored = value ? "enhanced" : "legacy";
+        if (_settings.Edition == stored) return;
+        _settings.Edition = stored;
+        _settings.Save();
+    }
+
+    /// <summary>Pick the edition from the game folder's executable and say what was found.</summary>
+    private void DetectGameEdition(string folder)
+    {
+        folder = folder.Trim();
+        string hint = "";
+        if (folder.Length > 0 && Directory.Exists(folder))
+        {
+            if (GameEditions.Detect(folder) is { } e)
+            {
+                IsEnhanced = e == GameEdition.Enhanced;
+                hint = $"Detected {e.DisplayName()} ({e.ExeName()}).";
+            }
+            else if (GameEditions.IsAmbiguous(folder))
+                hint = $"Both {GameEditions.LegacyExe} and {GameEditions.EnhancedExe} are here — choose the game version.";
+            else
+                hint = $"No {GameEditions.LegacyExe} / {GameEditions.EnhancedExe} in this folder — is it the GTA V folder?";
+        }
+        GameEditionHint = hint;
+        HasGameEditionHint = hint.Length > 0;
+    }
+
     public bool LooseFolders
     {
         get => !PackRpf;
@@ -407,7 +457,11 @@ public sealed partial class MainViewModel : ObservableObject
     partial void OnPackRpfChanged(bool value) => OnPropertyChanged(nameof(LooseFolders));
 
     // Folders are remembered as soon as they are picked or typed, not only after a build.
-    partial void OnGameFolderChanged(string value) => Remember(value.Trim(), _settings.LastGame, v => _settings.LastGame = v);
+    partial void OnGameFolderChanged(string value)
+    {
+        Remember(value.Trim(), _settings.LastGame, v => _settings.LastGame = v);
+        if (IsPlayer) DetectGameEdition(value);
+    }
     partial void OnOutputFolderChanged(string value) => Remember(value.Trim(), _settings.LastOutput, v => _settings.LastOutput = v);
 
     private void Remember(string value, string? stored, Action<string?> store)
@@ -537,7 +591,7 @@ public sealed partial class MainViewModel : ObservableObject
                 ShowResult(false, "Build not finished", "Base weapon could not be determined — see the log.", null);
             }
             else if (result.InstalledTo is not null)
-                ShowResult(true, "Installed into GTA V",
+                ShowResult(true, $"Installed into {opts.Edition!.Value.DisplayName()}",
                            $"Mod built and installed into the game:\n{result.InstalledTo}", result.InstalledTo);
             else if (!result.Packed)
                 ShowResult(true, "Done — loose folders",
@@ -605,11 +659,13 @@ public sealed partial class MainViewModel : ObservableObject
         {
             var game = GameFolder.Trim();
             if (game.Length == 0) return (null, "No GTA V game folder selected.");
-            if (!Directory.Exists(Path.Combine(game, "mods")))
-                return (null, "The selected game folder has no «mods» directory.\n" +
-                              "Add-On install is only possible through the mods folder (OpenIV).");
+            if (!Directory.Exists(game)) return (null, "The selected game folder doesn't exist.");
+            bool isGame = GameEditions.Detect(game) is not null || GameEditions.IsAmbiguous(game);
+            if (!isGame && !Directory.Exists(Path.Combine(game, "mods")))
+                return (null, $"The selected folder doesn't look like GTA V: no {GameEditions.LegacyExe} / " +
+                              $"{GameEditions.EnhancedExe} and no «mods» directory.");
             installDir = game;
-            outDir = AppPaths.StagingDir;
+            outDir = AppPaths.StagingFor(Edition);
             packRpf = true;
             _settings.LastGame = game;
         }
@@ -647,6 +703,8 @@ public sealed partial class MainViewModel : ObservableObject
             // the single-pack merge belongs to the player flow only
             MergePack = IsPlayer && MergePack,
             InstallGameDir = installDir,
+            Edition = Edition,
+            PluginsDir = Path.Combine(AppPaths.Data, "plugins"),
         }, null);
     }
 
@@ -690,6 +748,8 @@ public sealed partial class MainViewModel : ObservableObject
         if (msg.StartsWith("Merged into", StringComparison.Ordinal)) return "Loading the shared pack";
         if (msg.StartsWith("WEAPON hash", StringComparison.Ordinal)) return "Assembling the dlcpack";
         if (msg.StartsWith("Self-checking", StringComparison.Ordinal)) return "Verifying resources";
+        if (msg.StartsWith("Converting", StringComparison.Ordinal)) return "Converting models to gen9";
+        if (msg.StartsWith("    Copying update", StringComparison.Ordinal)) return "Setting up the mods folder";
         if (msg.StartsWith("Installing", StringComparison.Ordinal)) return "Installing into the game";
         return null;
     }
