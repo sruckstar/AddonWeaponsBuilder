@@ -1,0 +1,132 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Awb.App.App"
+             Name="AddonWeapons Builder"
+             RequestedThemeVariant="Dark">
+
+  <!-- A gunsmith's workbench: gunmetal steel + brushed gold. Gray builds structure,
+       gold means "act / active". Bahnschrift for display, Segoe UI for body. -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Dark">
+          <Color x:Key="BgColor">#14171C</Color>
+          <SolidColorBrush x:Key="BgBrush" Color="#14171C" />
+          <SolidColorBrush x:Key="Surface1Brush" Color="#1B1F26" />
+          <SolidColorBrush x:Key="Surface2Brush" Color="#222732" />
+          <SolidColorBrush x:Key="Surface3Brush" Color="#2A2F3B" />
+          <SolidColorBrush x:Key="InputBrush" Color="#10131A" />
+          <SolidColorBrush x:Key="BorderBrushSoft" Color="#0DFFFFFF" />
+          <SolidColorBrush x:Key="BorderBrushNormal" Color="#13FFFFFF" />
+          <SolidColorBrush x:Key="BorderBrushStrong" Color="#24FFFFFF" />
+          <SolidColorBrush x:Key="Text1Brush" Color="#F2EFE8" />
+          <SolidColorBrush x:Key="Text2Brush" Color="#A9A69D" />
+          <SolidColorBrush x:Key="Text3Brush" Color="#74716A" />
+          <SolidColorBrush x:Key="GoldBrush" Color="#D8B45A" />
+          <SolidColorBrush x:Key="GoldBrightBrush" Color="#ECCB74" />
+          <SolidColorBrush x:Key="GoldWashBrush" Color="#1FD8B45A" />
+          <SolidColorBrush x:Key="GoldLineBrush" Color="#5CD8B45A" />
+          <SolidColorBrush x:Key="OnGoldBrush" Color="#1A1407" />
+          <SolidColorBrush x:Key="DangerBrush" Color="#E5675C" />
+          <SolidColorBrush x:Key="DangerWashBrush" Color="#21E5675C" />
+          <SolidColorBrush x:Key="SuccessBrush" Color="#7FC08A" />
+          <SolidColorBrush x:Key="SuccessWashBrush" Color="#1F7FC08A" />
+          <SolidColorBrush x:Key="StageBrush" Color="#F40C0E12" />
+          <LinearGradientBrush x:Key="GoldGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="#ECCB74" />
+            <GradientStop Offset="0.52" Color="#D0A447" />
+            <GradientStop Offset="1" Color="#B8893A" />
+          </LinearGradientBrush>
+          <LinearGradientBrush x:Key="GoldGradientHover" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="#F4D885" />
+            <GradientStop Offset="0.52" Color="#DDB255" />
+            <GradientStop Offset="1" Color="#C49645" />
+          </LinearGradientBrush>
+
+          <!-- Fluent control resources -->
+          <SolidColorBrush x:Key="TextControlBackground" Color="#10131A" />
+          <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#131720" />
+          <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#10131A" />
+          <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="#0C0F14" />
+          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#1AFFFFFF" />
+          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#5CD8B45A" />
+          <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#D8B45A" />
+          <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="#0DFFFFFF" />
+          <SolidColorBrush x:Key="TextControlForeground" Color="#F2EFE8" />
+          <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#F2EFE8" />
+          <SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="#F2EFE8" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#5E5B53" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#5E5B53" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#5E5B53" />
+          <SolidColorBrush x:Key="TextControlSelectionHighlightColor" Color="#80D8B45A" />
+        </ResourceDictionary>
+
+        <ResourceDictionary x:Key="Light">
+          <Color x:Key="BgColor">#ECE8DF</Color>
+          <SolidColorBrush x:Key="BgBrush" Color="#ECE8DF" />
+          <SolidColorBrush x:Key="Surface1Brush" Color="#F6F2EA" />
+          <SolidColorBrush x:Key="Surface2Brush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="Surface3Brush" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="InputBrush" Color="#FBF9F3" />
+          <SolidColorBrush x:Key="BorderBrushSoft" Color="#14282216" />
+          <SolidColorBrush x:Key="BorderBrushNormal" Color="#1F282216" />
+          <SolidColorBrush x:Key="BorderBrushStrong" Color="#33282216" />
+          <SolidColorBrush x:Key="Text1Brush" Color="#221E16" />
+          <SolidColorBrush x:Key="Text2Brush" Color="#5B564C" />
+          <SolidColorBrush x:Key="Text3Brush" Color="#8C877C" />
+          <SolidColorBrush x:Key="GoldBrush" Color="#A6802C" />
+          <SolidColorBrush x:Key="GoldBrightBrush" Color="#C39A3A" />
+          <SolidColorBrush x:Key="GoldWashBrush" Color="#1FA6802C" />
+          <SolidColorBrush x:Key="GoldLineBrush" Color="#66A6802C" />
+          <SolidColorBrush x:Key="OnGoldBrush" Color="#FFFDF6" />
+          <SolidColorBrush x:Key="DangerBrush" Color="#C4453A" />
+          <SolidColorBrush x:Key="DangerWashBrush" Color="#1AC4453A" />
+          <SolidColorBrush x:Key="SuccessBrush" Color="#3F8A4C" />
+          <SolidColorBrush x:Key="SuccessWashBrush" Color="#1A3F8A4C" />
+          <SolidColorBrush x:Key="StageBrush" Color="#F4ECE8DF" />
+          <LinearGradientBrush x:Key="GoldGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="#D3A949" />
+            <GradientStop Offset="0.55" Color="#B98D33" />
+            <GradientStop Offset="1" Color="#9A742A" />
+          </LinearGradientBrush>
+          <LinearGradientBrush x:Key="GoldGradientHover" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Offset="0" Color="#DDB455" />
+            <GradientStop Offset="0.55" Color="#C4983C" />
+            <GradientStop Offset="1" Color="#A67E30" />
+          </LinearGradientBrush>
+
+          <SolidColorBrush x:Key="TextControlBackground" Color="#FBF9F3" />
+          <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF" />
+          <SolidColorBrush x:Key="TextControlBackgroundDisabled" Color="#F0ECE3" />
+          <SolidColorBrush x:Key="TextControlBorderBrush" Color="#26282216" />
+          <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#66A6802C" />
+          <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#A6802C" />
+          <SolidColorBrush x:Key="TextControlBorderBrushDisabled" Color="#14282216" />
+          <SolidColorBrush x:Key="TextControlForeground" Color="#221E16" />
+          <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#221E16" />
+          <SolidColorBrush x:Key="TextControlForegroundPointerOver" Color="#221E16" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#A6A196" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#A6A196" />
+          <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#A6A196" />
+          <SolidColorBrush x:Key="TextControlSelectionHighlightColor" Color="#66A6802C" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+
+      <FontFamily x:Key="DisplayFont">Bahnschrift, Segoe UI, Arial</FontFamily>
+      <FontFamily x:Key="BodyFont">Segoe UI, Arial</FontFamily>
+      <FontFamily x:Key="MonoFont">Consolas, Cascadia Mono, Courier New</FontFamily>
+      <CornerRadius x:Key="ControlCornerRadius">7</CornerRadius>
+    </ResourceDictionary>
+  </Application.Resources>
+
+  <Application.Styles>
+    <FluentTheme>
+      <FluentTheme.Palettes>
+        <ColorPaletteResources x:Key="Dark" Accent="#D8B45A" RegionColor="#14171C" />
+        <ColorPaletteResources x:Key="Light" Accent="#A6802C" RegionColor="#ECE8DF" />
+      </FluentTheme.Palettes>
+    </FluentTheme>
+    <StyleInclude Source="avares://AddonWeaponsBuilder/Styles/Armory.axaml" />
+  </Application.Styles>
+</Application>

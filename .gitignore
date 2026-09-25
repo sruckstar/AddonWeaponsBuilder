@@ -1,0 +1,35 @@
+# --- build output / binaries ---
+bin/
+obj/
+publish/
+installer/out/
+*.exe
+*.dll
+*.pdb
+*.zip
+*.7z
+*.rar
+*.rpf
+*.nupkg
+
+# ...except the ASI loaders the app installs into the game folder
+!data/plugins/
+!data/plugins/*.asi
+
+# --- tests and developer tools (not needed to build or run the app) ---
+tests/
+tools/
+TestResults/
+*.dev.slnx
+
+# --- IDE / OS / scratch ---
+.vs/
+.vscode/
+.idea/
+.claude/
+*.user
+*.suo
+*.log
+*.tmp
+Thumbs.db
+desktop.ini

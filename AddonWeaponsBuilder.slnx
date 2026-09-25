@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Awb.App/Awb.App.csproj" />
+    <Project Path="src/Awb.Cli/Awb.Cli.csproj" />
+    <Project Path="src/Awb.Core/Awb.Core.csproj" />
+  </Folder>
+</Solution>

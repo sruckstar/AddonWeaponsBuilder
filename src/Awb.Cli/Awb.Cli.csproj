@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>awbctl</AssemblyName>
+    <RootNamespace>Awb.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Awb.Core\Awb.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\..\data\**\*" Exclude="..\..\data\**\*.bak" LinkBase="data" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

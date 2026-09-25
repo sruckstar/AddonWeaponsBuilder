@@ -1,0 +1,430 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:Awb.App.ViewModels"
+        xmlns:c="using:Awb.App.Controls"
+        mc:Ignorable="d" d:DesignWidth="1120" d:DesignHeight="780"
+        x:Class="Awb.App.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="AddonWeapons Builder"
+        Icon="/Assets/handgun.ico"
+        Width="1120" Height="780" MinWidth="900" MinHeight="620"
+        WindowStartupLocation="CenterScreen"
+        DragDrop.AllowDrop="True">
+
+  <Window.Resources>
+    <StreamGeometry x:Key="IconFolder">M3 6.5C3 5.67 3.67 5 4.5 5h4.2l2 2h8.8c.83 0 1.5.67 1.5 1.5v9c0 .83-.67 1.5-1.5 1.5h-15C3.67 19 3 18.33 3 17.5z</StreamGeometry>
+    <StreamGeometry x:Key="IconSun">M12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0-5 1 3h-2zm0 20-1-3h2zM2 12l3-1v2zm20 0-3 1v-2zM4.9 4.9l2.8 1.4-1.4 1.4zm14.2 14.2-2.8-1.4 1.4-1.4zM4.9 19.1l1.4-2.8 1.4 1.4zM19.1 4.9l-1.4 2.8-1.4-1.4z</StreamGeometry>
+    <StreamGeometry x:Key="IconMoon">M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z</StreamGeometry>
+    <StreamGeometry x:Key="IconCheck">M4 12.5l5 5L20 6.5</StreamGeometry>
+    <StreamGeometry x:Key="IconAlert">M12 3 2 20h20zm0 5v6m0 2.5v1</StreamGeometry>
+    <StreamGeometry x:Key="IconClose">M6 6l12 12M18 6 6 18</StreamGeometry>
+    <StreamGeometry x:Key="IconDrop">M12 3v11M7.5 9.5 12 14l4.5-4.5M4 15v3.5c0 .83.67 1.5 1.5 1.5h13c.83 0 1.5-.67 1.5-1.5V15</StreamGeometry>
+    <StreamGeometry x:Key="IconArchive">M4 8h16v11.5c0 .83-.67 1.5-1.5 1.5h-13C4.67 21 4 20.33 4 19.5zM3 4h18v4H3zM10 12h4</StreamGeometry>
+    <StreamGeometry x:Key="IconFile">M6 3h8l4 4v13.5c0 .28-.22.5-.5.5h-11c-.28 0-.5-.22-.5-.5zM14 3v4h4</StreamGeometry>
+  </Window.Resources>
+
+  <Grid>
+    <Grid RowDefinitions="Auto,*,Auto">
+
+      <!-- ================= HEADER ================= -->
+      <Border Grid.Row="0" Padding="22,14" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="0,0,0,1">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+            <c:CylinderMark Width="34" Height="34" />
+            <StackPanel VerticalAlignment="Center" Spacing="1">
+              <TextBlock Classes="brand" Text="ADDONWEAPONS" />
+              <TextBlock Classes="brand-sub" Text="BUILDER" />
+            </StackPanel>
+          </StackPanel>
+
+          <Border Grid.Column="2" Classes="seg" VerticalAlignment="Center" Margin="0,0,14,0">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+              <RadioButton Classes="seg" GroupName="mode" IsChecked="{Binding IsModder}"
+                           ToolTip.Tip="Build the DLC into a folder">
+                <StackPanel Spacing="0">
+                  <TextBlock Text="For Modders" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                  <TextBlock Text="build DLC to a folder" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Classes="seg" GroupName="mode" IsChecked="{Binding IsPlayer}"
+                           ToolTip.Tip="Install straight into GTA V">
+                <StackPanel Spacing="0">
+                  <TextBlock Text="For Players" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                  <TextBlock Text="install into GTA V" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                </StackPanel>
+              </RadioButton>
+            </StackPanel>
+          </Border>
+
+          <Button Grid.Column="3" Classes="icon" Command="{Binding ToggleThemeCommand}"
+                  ToolTip.Tip="Toggle light / dark theme" VerticalAlignment="Center">
+            <Panel Width="20" Height="20">
+              <PathIcon Data="{StaticResource IconSun}" Width="18" Height="18" IsVisible="{Binding IsDark}" />
+              <PathIcon Data="{StaticResource IconMoon}" Width="16" Height="16" IsVisible="{Binding !IsDark}" />
+            </Panel>
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- ================= BODY ================= -->
+      <Grid Grid.Row="1" ColumnDefinitions="*,380">
+
+        <!-- form -->
+        <ScrollViewer Grid.Column="0" Padding="22,18,12,18">
+          <StackPanel Spacing="14">
+
+            <!-- 01 SOURCE -->
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Classes="idx" Text="01" />
+                  <TextBlock Classes="h" Text="SOURCE" />
+                </StackPanel>
+                <TextBlock Classes="desc" IsVisible="{Binding IsModder}"
+                           Text="Folder with the weapon's Replace files (.ydr / .ytd) — or with your own metas, or a finished dlc.rpf." />
+                <TextBlock Classes="desc" IsVisible="{Binding IsPlayer}"
+                           Text="The weapon mod as you downloaded it — a folder or an archive, packed any way." />
+
+                <!-- modder: a plain folder path -->
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8" IsVisible="{Binding IsModder}">
+                  <TextBox Classes="path" Text="{Binding InputFolder}" PlaceholderText="No folder selected" />
+                  <Button Grid.Column="1" Classes="ghost" Command="{Binding BrowseInputCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                      <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
+                      <TextBlock Text="Browse…" />
+                    </StackPanel>
+                  </Button>
+                </Grid>
+
+                <!-- player: drop zone (the whole window accepts the drop, this is where it shows) -->
+                <Panel x:Name="DropZone" Classes="dropzone" IsVisible="{Binding IsPlayer}" MinHeight="138">
+                  <Rectangle Classes="dropframe" RadiusX="10" RadiusY="10" StrokeThickness="1.5" StrokeDashArray="5,4" />
+
+                  <!-- empty -->
+                  <StackPanel Spacing="7" Margin="18,16" IsVisible="{Binding DropZoneEmpty}"
+                              HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Path Data="{StaticResource IconDrop}" Stroke="{DynamicResource GoldBrush}" StrokeThickness="1.8"
+                          StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" Width="28" Height="28"
+                          HorizontalAlignment="Center" />
+                    <TextBlock Text="Drop the weapon here" FontWeight="SemiBold" FontSize="15" HorizontalAlignment="Center"
+                               FontFamily="{StaticResource DisplayFont}" LetterSpacing="0.6" />
+                    <TextBlock Classes="desc" TextAlignment="Center" MaxWidth="440"
+                               Text="Folder, .zip, .rar or .7z. Models and textures are found in any sub-folder; configs that come with the mod are installed as they are, readmes are skipped." />
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,5,0,0">
+                      <Button Classes="ghost small" Command="{Binding BrowseSourceFolderCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <PathIcon Data="{StaticResource IconFolder}" Width="12" Height="12" />
+                          <TextBlock Text="Choose folder…" />
+                        </StackPanel>
+                      </Button>
+                      <Button Classes="ghost small" Command="{Binding BrowseSourceArchiveCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <Path Data="{StaticResource IconArchive}" Stroke="{Binding $parent[Button].Foreground}"
+                                StrokeThickness="1.6" StrokeJoin="Round" Stretch="Uniform" Width="12" Height="12" />
+                          <TextBlock Text="Choose archive…" />
+                        </StackPanel>
+                      </Button>
+                    </StackPanel>
+                  </StackPanel>
+
+                  <!-- unpacking -->
+                  <StackPanel Spacing="10" Margin="18,16" IsVisible="{Binding IsPreparing}" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding PrepareStatus}" HorizontalAlignment="Center" FontSize="13"
+                               TextTrimming="CharacterEllipsis" FontFamily="{StaticResource DisplayFont}" />
+                    <ProgressBar IsIndeterminate="True" Height="3" MinHeight="3" MaxWidth="320" />
+                    <Button Classes="ghost small" Content="Cancel" HorizontalAlignment="Center"
+                            Command="{Binding ClearPlayerSourceCommand}" />
+                  </StackPanel>
+
+                  <!-- loaded -->
+                  <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="14" Margin="18,14" IsVisible="{Binding HasIntake}"
+                        VerticalAlignment="Center">
+                    <Border Width="46" Height="46" CornerRadius="23" Background="{DynamicResource GoldWashBrush}"
+                            BorderBrush="{DynamicResource GoldLineBrush}" BorderThickness="1">
+                      <Path Data="{StaticResource IconArchive}" Stroke="{DynamicResource GoldBrush}" StrokeThickness="1.6"
+                            StrokeJoin="Round" Stretch="Uniform" Width="20" Height="20" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding IntakeTitle}" FontWeight="SemiBold" FontSize="14"
+                                 FontFamily="{StaticResource DisplayFont}" TextTrimming="CharacterEllipsis" />
+                      <TextBlock Text="{Binding IntakeSummary}" FontSize="12" Foreground="{DynamicResource Text2Brush}"
+                                 FontFamily="{StaticResource MonoFont}" TextWrapping="Wrap" />
+                      <TextBlock Classes="desc" Text="Drop something else here to replace it." FontSize="11" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Classes="ghost small" Content="Change…" VerticalAlignment="Center"
+                            Command="{Binding BrowseSourceArchiveCommand}" ToolTip.Tip="Pick another archive" />
+                    <Button Grid.Column="3" Classes="icon" VerticalAlignment="Center" Command="{Binding ClearPlayerSourceCommand}"
+                            ToolTip.Tip="Clear">
+                      <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource Text3Brush}" StrokeThickness="1.8"
+                            Width="10" Height="10" Stretch="Uniform" StrokeLineCap="Round" />
+                    </Button>
+                  </Grid>
+                </Panel>
+                <Border Classes="warn" IsVisible="{Binding HasDropError}">
+                  <TextBlock Text="{Binding DropError}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource DangerBrush}" />
+                </Border>
+                <Border Classes="note" IsVisible="{Binding HasSourceNotice}">
+                  <TextBlock Text="{Binding SourceNotice}" TextWrapping="Wrap" FontSize="12" Foreground="{DynamicResource Text2Brush}" />
+                </Border>
+              </StackPanel>
+            </Border>
+
+            <!-- 02 DESTINATION -->
+            <Border Classes="card">
+              <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Classes="idx" Text="02" />
+                  <TextBlock Classes="h" Text="{Binding DestinationTitle}" />
+                </StackPanel>
+                <TextBlock Classes="desc" Text="{Binding DestinationHint}" />
+
+                <!-- modder -->
+                <StackPanel Spacing="10" IsVisible="{Binding IsModder}">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBox Classes="path" Text="{Binding OutputFolder}" PlaceholderText="Output folder" />
+                    <Button Grid.Column="1" Classes="ghost" Command="{Binding BrowseOutputCommand}">
+                      <StackPanel Orientation="Horizontal" Spacing="7">
+                        <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
+                        <TextBlock Text="Browse…" />
+                      </StackPanel>
+                    </Button>
+                  </Grid>
+                  <Border Classes="seg" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Spacing="2">
+                      <RadioButton Classes="seg" GroupName="fmt" IsChecked="{Binding PackRpf}" Content="Pack · dlc.rpf" />
+                      <RadioButton Classes="seg" GroupName="fmt" IsChecked="{Binding LooseFolders}" Content="Loose folders (CodeWalker)" />
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+
+                <!-- player -->
+                <StackPanel Spacing="10" IsVisible="{Binding IsPlayer}">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <TextBox Classes="path" Text="{Binding GameFolder}" PlaceholderText="GTA V game folder" />
+                    <Button Grid.Column="1" Classes="ghost" Command="{Binding BrowseGameCommand}">
+                      <StackPanel Orientation="Horizontal" Spacing="7">
+                        <PathIcon Data="{StaticResource IconFolder}" Width="14" Height="14" />
+                        <TextBlock Text="Browse…" />
+                      </StackPanel>
+                    </Button>
+                  </Grid>
+                  <TextBlock Classes="hint">
+                    <Run Text="Installs into " /><Run Text="mods/update/x64/dlcpacks" FontWeight="SemiBold" />
+                    <Run Text=" and registers the pack in dlclist.xml. Requires a " /><Run Text="mods" FontWeight="SemiBold" />
+                    <Run Text=" folder (OpenIV)." />
+                  </TextBlock>
+                  <CheckBox IsChecked="{Binding MergePack}">
+                    <StackPanel Spacing="1">
+                      <TextBlock Text="Single «AddonWeapons» pack" FontWeight="SemiBold" />
+                      <TextBlock Classes="desc" Text="Combine all guns into one DLC (otherwise a separate pack per gun). Spills into AddonWeapons2… past 3 GB." />
+                    </StackPanel>
+                  </CheckBox>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <!-- 03 WEAPON -->
+            <Border Classes="card">
+              <StackPanel Spacing="12">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Classes="idx" Text="03" />
+                  <TextBlock Classes="h" Text="WEAPON" />
+                </StackPanel>
+                <TextBlock Classes="desc" Text="How it appears in the in-game store." />
+                <Grid ColumnDefinitions="*,140,140" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="12">
+                  <StackPanel Grid.Column="0">
+                    <TextBlock Classes="label" Text="NAME" />
+                    <TextBox Text="{Binding Name}" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="1">
+                    <TextBlock Classes="label" Text="PRICE" />
+                    <TextBox Classes="num" Text="{Binding Price}" />
+                  </StackPanel>
+                  <StackPanel Grid.Column="2">
+                    <TextBlock Classes="label" Text="AMMO PRICE" />
+                    <TextBox Classes="num" Text="{Binding AmmoPrice}" />
+                  </StackPanel>
+                  <StackPanel Grid.Row="1" Grid.ColumnSpan="3">
+                    <TextBlock Classes="label" Text="DESCRIPTION" />
+                    <TextBox Text="{Binding Description}" />
+                  </StackPanel>
+                </Grid>
+
+                <StackPanel IsVisible="{Binding ModelNameVisible}">
+                  <TextBlock Classes="label" Text="MODEL NAME" />
+                  <TextBox Classes="path" Text="{Binding ModelName}" PlaceholderText="auto — e.g. w_pi_mygun"
+                           IsEnabled="{Binding ModelNameEnabled}" />
+                  <TextBlock Classes="hint" Text="Renames the .ydr/.ytd assets themselves. Magazines, attachments and hi-lods are re-derived from it. Leave empty to auto-generate." />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+
+            <!-- 04 COMPONENTS -->
+            <Border Classes="card" IsVisible="{Binding HasComponents}">
+              <StackPanel Spacing="10">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <TextBlock Classes="idx" Text="04" />
+                  <TextBlock Classes="h" Text="COMPONENTS" />
+                </StackPanel>
+                <TextBlock Classes="desc" Text="Store price for each module (empty = default: extended clip 400, attachments 500)." />
+                <ItemsControl ItemsSource="{Binding Components}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <StackPanel Spacing="6" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:ComponentPriceViewModel">
+                      <Border Background="{DynamicResource Surface2Brush}" CornerRadius="8" Padding="12,6"
+                              BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1">
+                        <Grid ColumnDefinitions="Auto,*,130" ColumnSpacing="10">
+                          <Border Classes="badge" VerticalAlignment="Center" MinWidth="56">
+                            <TextBlock Text="{Binding Kind}" HorizontalAlignment="Center" />
+                          </Border>
+                          <TextBlock Grid.Column="1" Text="{Binding Label}" VerticalAlignment="Center"
+                                     TextTrimming="CharacterEllipsis" FontSize="12.5" />
+                          <TextBox Grid.Column="2" Classes="num" Text="{Binding Price}" PlaceholderText="—"
+                                   MinHeight="32" Padding="8,5" />
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- side panel: analysis + log. The analysis card is capped in code-behind so a long
+             analysis scrolls inside it instead of pushing the log off the window. -->
+        <Grid Grid.Column="1" x:Name="SidePanel" RowDefinitions="Auto,*" Margin="0,18,22,18" RowSpacing="14">
+          <Border Classes="card" x:Name="AnalysisCard" Padding="18,16,6,16">
+            <Grid RowDefinitions="Auto,*" RowSpacing="10">
+              <Grid ColumnDefinitions="*,Auto" Margin="0,0,12,0">
+                <TextBlock Classes="h" Text="ANALYSIS" />
+                <Border Grid.Column="1" Classes="badge">
+                  <TextBlock Text="{Binding RouteBadge}" />
+                </Border>
+              </Grid>
+              <ScrollViewer Grid.Row="1" Padding="0,0,12,0">
+                <StackPanel Spacing="10">
+                  <StackPanel Spacing="3">
+                    <TextBlock Text="{Binding RouteTitle}" FontWeight="SemiBold" FontSize="14"
+                               FontFamily="{StaticResource DisplayFont}" />
+                    <TextBlock Classes="desc" Text="{Binding RouteDetail}" />
+                  </StackPanel>
+                  <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsScanning}" Height="3" MinHeight="3" />
+                  <ItemsControl ItemsSource="{Binding Analysis}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:AnalysisRow">
+                        <Grid ColumnDefinitions="96,*" Margin="0,3">
+                          <TextBlock Classes="kv-key" Text="{Binding Label}" />
+                          <TextBlock Grid.Column="1" Classes="kv-val" Text="{Binding Value}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <ItemsControl ItemsSource="{Binding Warnings}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Spacing="6" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="x:String">
+                        <Border Classes="warn">
+                          <SelectableTextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="11.5" Foreground="{DynamicResource DangerBrush}" />
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </ScrollViewer>
+            </Grid>
+          </Border>
+
+          <Border Grid.Row="1" Classes="card" Padding="0" x:Name="LogCard" MinHeight="160">
+            <Grid RowDefinitions="Auto,*">
+              <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="18,12,12,8" ColumnSpacing="8">
+                <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                         Fill="{DynamicResource GoldBrush}" IsVisible="{Binding !LogIsError}" />
+                <Ellipse Width="7" Height="7" VerticalAlignment="Center"
+                         Fill="{DynamicResource DangerBrush}" IsVisible="{Binding LogIsError}" />
+                <TextBlock Grid.Column="1" Classes="h" Text="BUILD LOG" Margin="4,0,0,0" />
+                <Button Grid.Column="2" Classes="ghost small" Content="Log file" Command="{Binding OpenLogFolderCommand}"
+                        ToolTip.Tip="Open the folder with awb.log" />
+                <Button Grid.Column="3" Classes="ghost small" Content="{Binding CopyLogLabel}" Command="{Binding CopyLogCommand}"
+                        IsEnabled="{Binding HasLog}" />
+              </Grid>
+              <ScrollViewer Grid.Row="1" x:Name="LogScroll" Padding="18,0,14,14">
+                <Panel>
+                  <TextBlock Classes="desc" IsVisible="{Binding !HasLog}"
+                             Text="The build log appears here while the Add-On is being built." />
+                  <SelectableTextBlock Classes="log" Text="{Binding LogText}" IsVisible="{Binding HasLog}" />
+                </Panel>
+              </ScrollViewer>
+            </Grid>
+          </Border>
+        </Grid>
+      </Grid>
+
+      <!-- ================= FOOTER ================= -->
+      <Border Grid.Row="2" Padding="22,12" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="0,1,0,0"
+              Background="{DynamicResource Surface1Brush}">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+          <!-- result banner -->
+          <Border x:Name="ResultBanner" IsVisible="{Binding ResultVisible}" CornerRadius="9" Padding="12,8"
+                  BorderThickness="1" Classes.ok="{Binding ResultOk}" Classes.err="{Binding !ResultOk}">
+            <Border.Styles>
+              <Style Selector="Border.ok">
+                <Setter Property="Background" Value="{DynamicResource SuccessWashBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource SuccessBrush}" />
+              </Style>
+              <Style Selector="Border.err">
+                <Setter Property="Background" Value="{DynamicResource DangerWashBrush}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource DangerBrush}" />
+              </Style>
+            </Border.Styles>
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
+              <Panel Width="20" Height="20" VerticalAlignment="Top" Margin="0,1,0,0">
+                <Path Data="{StaticResource IconCheck}" Stroke="{DynamicResource SuccessBrush}" StrokeThickness="2.4"
+                      StrokeLineCap="Round" Stretch="Uniform" IsVisible="{Binding ResultOk}" />
+                <Path Data="{StaticResource IconAlert}" Stroke="{DynamicResource DangerBrush}" StrokeThickness="2"
+                      StrokeLineCap="Round" StrokeJoin="Round" Stretch="Uniform" IsVisible="{Binding !ResultOk}" />
+              </Panel>
+              <StackPanel Grid.Column="1" Spacing="1">
+                <TextBlock Text="{Binding ResultTitle}" FontWeight="SemiBold" FontFamily="{StaticResource DisplayFont}" />
+                <TextBlock Text="{Binding ResultDetail}" FontSize="12" Foreground="{DynamicResource Text2Brush}"
+                           TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+              <Button Grid.Column="2" Classes="ghost small" Content="Open folder" VerticalAlignment="Center"
+                      Command="{Binding OpenResultCommand}" IsVisible="{Binding HasResultPath}" />
+              <Button Grid.Column="3" Classes="icon" VerticalAlignment="Top" Command="{Binding DismissResultCommand}">
+                <Path Data="{StaticResource IconClose}" Stroke="{DynamicResource Text3Brush}" StrokeThickness="1.8"
+                      Width="10" Height="10" Stretch="Uniform" StrokeLineCap="Round" />
+              </Button>
+            </Grid>
+          </Border>
+
+          <Button Grid.Column="1" Classes="primary" Command="{Binding BuildCommand}" VerticalAlignment="Center"
+                  MinWidth="200" HotKey="Ctrl+Enter">
+            <TextBlock Text="{Binding BuildButtonText}" HorizontalAlignment="Center" />
+          </Button>
+        </Grid>
+      </Border>
+    </Grid>
+
+    <!-- ================= BUILD STAGE (revolver) ================= -->
+    <Border Background="{DynamicResource StageBrush}" IsVisible="{Binding IsBuilding}">
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+        <c:RevolverView Width="440" Height="285" Running="{Binding IsBuilding}" FireCount="{Binding FireCount}" />
+        <TextBlock Text="{Binding StageStatus}" HorizontalAlignment="Center" FontSize="20" FontWeight="SemiBold"
+                   FontFamily="{StaticResource DisplayFont}" LetterSpacing="1" />
+        <TextBlock Text="{Binding StageHint}" HorizontalAlignment="Center" FontSize="13"
+                   Foreground="{DynamicResource GoldBrush}" FontFamily="{StaticResource DisplayFont}" LetterSpacing="1.5" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>
