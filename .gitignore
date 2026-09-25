@@ -23,6 +23,10 @@ prototypes/
 TestResults/
 *.dev.slnx
 
+# --- local-only texts: the 5Mods page and the Russian developer notes ---
+5mods-description.txt
+docs/DEVELOPMENT.md
+
 # --- IDE / OS / scratch ---
 .vs/
 .vscode/

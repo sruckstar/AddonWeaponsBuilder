@@ -203,6 +203,9 @@ click away from there — attach it when reporting a problem.
 - [CodeWalker](https://github.com/dexyfex/CodeWalker) by dexyfex — resource reading and gen9 conversion.
 - **OpenIV.asi** by the OpenIV team and the **ASI Loader** by Alexander Blade — mod support for GTA V Legacy.
 - **Simple Mods Loader** (`DSOUND.dll`) by NativeCoder — mod support for GTA V Enhanced.
+- The weapon on the banner and in the screenshots is
+  [Hawk & Little Equalizer .410](https://www.gta5-mods.com/weapons/hawk-little-equalizer-410-add-on-animated-sound-tints-lore-friendly)
+  by **HeySlickThatsMe**.
 
 Grand Theft Auto V is a trademark of Take-Two Interactive / Rockstar Games. This project is not affiliated
 with or endorsed by them.
